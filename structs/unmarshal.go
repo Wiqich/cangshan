@@ -6,84 +6,81 @@ import (
 	"strconv"
 )
 
-type unmarshalError struct {
-	err  error
-	path string
-}
+var (
+	unmarshalHandlers map[reflect.Kind]func(reflect.Value, reflect.Value) *unmarshalError
+)
 
-func newUnmarshalError(format string, params ...interface{}) *unmarshalError {
-	return &unmarshalError{
-		err:  fmt.Errorf(format, params...),
-		path: "",
-	}
-}
-
-func (err *unmarshalError) wrap(path string) *unmarshalError {
-	if err.path != "" {
-		if err.path[0] == '[' {
-			path += err.path
-		} else {
-			path += "." + err.path
-		}
-	}
-	return &unmarshalError{
-		err:  err.err,
-		path: path,
+func init() {
+	unmarshalHandlers = map[reflect.Kind]func(reflect.Value, reflect.Value) *unmarshalError{
+		reflect.Bool:    unmarshalBool,
+		reflect.Int:     unmarshalNum,
+		reflect.Int8:    unmarshalNum,
+		reflect.Int16:   unmarshalNum,
+		reflect.Int32:   unmarshalNum,
+		reflect.Int64:   unmarshalNum,
+		reflect.Uint:    unmarshalNum,
+		reflect.Uint8:   unmarshalNum,
+		reflect.Uint16:  unmarshalNum,
+		reflect.Uint32:  unmarshalNum,
+		reflect.Uint64:  unmarshalNum,
+		reflect.Float32: unmarshalNum,
+		reflect.Float64: unmarshalNum,
+		reflect.Map:     unmarshalMap,
+		reflect.Slice:   unmarshalSlice,
+		reflect.String:  unmarshalString,
+		reflect.Struct:  unmarshalStruct,
 	}
 }
 
 func Unmarshal(in map[string]interface{}, out interface{}) error {
-	err := unmarshal(reflect.ValueOf(in), reflect.ValueOf(out))
+	return UnmarshalValue(reflect.ValueOf(in), reflect.ValueOf(out))
+}
+
+func UnmarshalValue(in, out reflect.Value) error {
+	err := unmarshal(in, out)
 	if err.path == "" {
-		return fmt.Errorf("unmarshal struct fail: %s", err.err.Error())
+		return fmt.Errorf("unmarshal fail: %s", err.err.Error())
 	} else {
-		return fmt.Errorf("unmarshal struct field %s fail: %s", err.path, err.err.Error())
+		return fmt.Errorf("unmarshal field %s fail: %s", err.path, err.err.Error())
 	}
 }
 
 func unmarshal(in, out reflect.Value) *unmarshalError {
-	for out.Kind() == reflect.Ptr {
-		out.Set(reflect.New(out.Elem().Type()))
-		out = out.Elem()
+	if err := convert(in, out); err != errNoConverter {
+		// first: Converter
+		if err != nil {
+			return newUnmarshalError("convert fail: %s", err.Error())
+		}
+	} else {
+		// second: do unmarhsaling
+		if out.Kind() == reflect.Ptr {
+			out.Set(reflect.New(out.Elem().Type()))
+			out = out.Elem()
+		}
+		if handler := unmarshalHandlers[in.Kind()]; handler == nil {
+			return newUnmarshalError("unsupported in type: %s", in.Type())
+		} else if err := handler(in, out); err != nil {
+			return err
+		}
 	}
-	inType := in.Type()
-	inKind := inType.Kind()
-	switch {
-	case inKind == reflect.Bool:
-		return unmarshalBool(in, out)
-	case inKind >= reflect.Int && inKind <= reflect.Float64 && inKind != reflect.Uintptr:
-		return unmarshalNum(in, out)
-	case inKind == reflect.Map && inType.Key().Kind() == reflect.String:
-		return unmarshalMap(in, out)
-	case inKind == reflect.Slice:
-		return unmarshalSlice(in, out)
-	case inKind == reflect.String:
-		return unmarshalString(in, out)
-	default:
-		return newUnmarshalError("unsupported in type: %s", inType)
-	}
+	return nil
 }
 
 func unmarshalMap(in, out reflect.Value) *unmarshalError {
 	out.Set(reflect.MakeMap(out.Type()))
 	outType := out.Type()
-	switch outType.Kind() {
-	case reflect.Struct:
-		return unmarshalStruct(in, out)
-	case reflect.Map:
-		if outType.Key() != nil {
-			return newUnmarshalError("expect type map[string]interface{}, not %s", outType)
-		}
-		for _, key := range in.MapKeys() {
-			value := in.MapIndex(key)
-			outValue := reflect.New(outType.Elem())
-			if err := unmarshal(value, outValue); err != nil {
-				return err.wrap(fmt.Sprintf("[%s]", key.String()))
-			}
-			out.SetMapIndex(key, outValue.Elem())
-		}
+	if outType.Key().Kind() != reflect.Struct {
+		return newUnmarshalError("expect type map[string]interface{}, not %s", outType)
 	}
-	return newUnmarshalError("expect type struct/map[string]interface{}, not %s", outType)
+	for _, key := range in.MapKeys() {
+		value := in.MapIndex(key)
+		outValue := reflect.New(outType.Elem())
+		if err := unmarshal(value, outValue); err != nil {
+			return err.wrap(fmt.Sprintf("[%s]", key.String()))
+		}
+		out.SetMapIndex(key, outValue.Elem())
+	}
+	return nil
 }
 
 func unmarshalStruct(in, out reflect.Value) *unmarshalError {
@@ -94,30 +91,16 @@ func unmarshalStruct(in, out reflect.Value) *unmarshalError {
 	}
 	for i := 0; i < outType.NumField(); i += 1 {
 		field := outType.Field(i)
-		if inValue, found := inMap[field.Name]; !found {
-			if defaultValue := field.Tag.Get("defaultValue"); defaultValue != "" {
-				if err := setDefaultValue(out.Field(i), defaultValue); err != nil {
-					return err.wrap(field.Name)
-				}
+		inValue, found := inMap[field.Name]
+		if !found {
+			if defaultValue := field.Tag.Get("default"); defaultValue != "" {
+				inValue = reflect.ValueOf(defaultValue)
+			} else {
+				continue
 			}
 		}
-		pluginDone := false
-		for name, plugin := range unmarshalPlugins {
-			if tag := field.Tag.Get(name); tag != "" {
-				if err := plugin.Unmarshal(inValue, out.Field(i), tag); err == ErrIgnorePlugin {
-					continue
-				} else if err != nil {
-					return newUnmarshalError(err.Error()).wrap(name)
-				} else {
-					pluginDone = true
-					break
-				}
-			}
-		}
-		if !pluginDone {
-			if err := unmarshal(inValue, out.Field(i)); err != nil {
-				return err.wrap(name)
-			}
+		if err := unmarshal(inValue, out.Field(i)); err != nil {
+			return err.wrap(field.Name)
 		}
 	}
 	return nil
@@ -172,8 +155,8 @@ func setDefaultValue(out reflect.Value, defaultValue string) *unmarshalError {
 	case outKind >= reflect.Int && outKind <= reflect.Int64:
 		var value int64
 		var err error
-		if defaultValue[0] == "0" {
-			if len(defaultValue) > 2 && defaultValue[1] == "x" {
+		if defaultValue[0] == '0' {
+			if len(defaultValue) > 2 && defaultValue[1] == 'x' {
 				value, err = strconv.ParseInt(defaultValue[2:], 16, 64)
 			} else if len(defaultValue) > 1 {
 				value, err = strconv.ParseInt(defaultValue[1:], 8, 64)
@@ -190,8 +173,8 @@ func setDefaultValue(out reflect.Value, defaultValue string) *unmarshalError {
 	case outKind >= reflect.Uint && outKind <= reflect.Uint64:
 		var value uint64
 		var err error
-		if defaultValue[0] == "0" {
-			if len(defaultValue) > 2 && defaultValue[1] == "x" {
+		if defaultValue[0] == '0' {
+			if len(defaultValue) > 2 && defaultValue[1] == 'x' {
 				value, err = strconv.ParseUint(defaultValue[2:], 16, 64)
 			} else if len(defaultValue) > 1 {
 				value, err = strconv.ParseUint(defaultValue[1:], 8, 64)
@@ -215,4 +198,5 @@ func setDefaultValue(out reflect.Value, defaultValue string) *unmarshalError {
 	default:
 		return newUnmarshalError("unsupport default value type: %s", out.Type())
 	}
+	return nil
 }

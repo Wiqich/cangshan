@@ -5,31 +5,15 @@ import (
 	"github.com/chenxing/cangshan/container/poset"
 	"github.com/chenxing/cangshan/structs/unmarshaler"
 	"io"
+	"reflect"
 )
 
-func init() {
-	unmarshaler.RegisterUnmarshalPlugin("cangshan.logging.AcceptedLevels",
-		func(config interface{}) *AcceptedLevels {
-			whiteCount, blackCount := 0, 0
-			levels := &AcceptedLevels{
-				levesl: poset.NewStringPoset(),
-			}
-		})
-}
-
-type AcceptedLevels struct {
-	blackMode bool
-	levels    poset.StringPoset
-}
-
-func (levels AcceptedLevels) Accept(level string) bool {
-
-}
+type LogWriter io.Writer
 
 type Handler struct {
-	Formatter *Formatter      `autoinit:"true"`
-	Levels    *AcceptedLevels `customloader:"cangshan.logging.AcceptedLevels"`
-	LogWriter io.Writer       `classassemble:"cangshan.logging.LogWriter"`
+	Levels    *Levels
+	Formatter *Formatter `assemble`
+	Writer    LogWriter  `assemble`
 }
 
 func (handler Handler) WriteLog(event *Event) error {
