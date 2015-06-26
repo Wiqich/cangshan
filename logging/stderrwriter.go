@@ -1,29 +1,40 @@
 package logging
 
 import (
+	"github.com/chenxing/cangshan/application"
 	"github.com/mgutz/ansi"
 	"os"
 	"sync"
 )
 
-type ColorFunc func(string) string
-
-func (stream LogStream) Write(p []byte) (int, error) {
-	stream.Lock()
-	defer stream.Unlock()
-	return LogStream.Write(p)
+func init() {
+	application.RegisterModuleCreater("StderrLogWriter",
+		func() interface{} {
+			return new(StderrWriter)
+		})
 }
 
+var (
+	stderrMutex sync.Mutex
+)
+
 type StderrWriter struct {
-	mutex sync.Mutex
-	Color ColorFunc
+	Color     string
+	colorFunc func(string) string
+}
+
+func (writer *StderrWriter) Initialize() error {
+	if writer.Color != "" {
+		writer.colorFunc = ansi.ColorFunc(writer.Color)
+	}
+	return nil
 }
 
 func (writer StderrWriter) Write(p []byte) (int, error) {
-	if writer.Color != nil {
-		p = []byte(writer.Color(string(p)))
+	if writer.colorFunc != nil {
+		p = []byte(writer.colorFunc(string(p)))
 	}
-	writer.mutex.Lock()
-	defer writer.mutex.Unlock()
+	stderrMutex.Lock()
+	defer stderrMutex.Unlock()
 	return os.Stderr.Write(p)
 }

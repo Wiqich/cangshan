@@ -2,82 +2,111 @@ package logging
 
 import (
 	"fmt"
+	"github.com/chenxing/cangshan/application"
+	"path/filepath"
 	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
 
-var (
-	fieldFormatters = map[string]FieldFormatter{
-		"level":            levelFormatter,
-		"message":          messageFormatter,
-		"filename":         filenameFormatter,
-		"line":             lineFormatter,
-		"funcname":         funcnameFormatter,
-		"funcshortname":    funcshortnameFormatter,
-		"time":             timeFormatter("2006-01-02:15:04:05"),
-		"time.z":           timeFormatter("2006-01-02:15:04:05-0700"),
-		"time.nginx":       timeFormatter("02/Jan/2006:15:04:05 -0700"),
-		"time.ansic":       timeFormatter(time.ANSIC),
-		"time.unixdate":    timeFormatter(time.UnixDate),
-		"time.rubydate":    timeFormatter(time.RubyDate),
-		"time.rfc822":      timeFormatter(time.RFC822),
-		"time.rfc822z":     timeFormatter(time.RFC822Z),
-		"time.rfc850":      timeFormatter(time.RFC850),
-		"time.rfc1123":     timeFormatter(time.RFC1123),
-		"time.rfc1123z":    timeFormatter(time.RFC1123Z),
-		"time.rfc3339":     timeFormatter(time.RFC3339),
-		"time.rfc3339nano": timeFormatter(time.RFC3339Nano),
-		"time.kitchen":     timeFormatter(time.Kitchen),
-		"time.stamp":       timeFormatter(time.Stamp),
-		"time.stampmilli":  timeFormatter(time.StampMilli),
-		"time.stampmicro":  timeFormatter(time.StampMicro),
-		"time.stampnano":   timeFormatter(time.StampNano),
-	}
+func init() {
+	application.RegisterModuleCreater("LogFormatter",
+		func() interface{} {
+			return new(Formatter)
+		})
+}
 
-	fieldRegexp, _ = regexp.Compile("\\%\\([^)]+\\)")
+type event struct {
+	level     string
+	message   string
+	file      string
+	line      string
+	timestamp time.Time
+	funcname  string
+	attr      map[string]string
+}
+
+func newEvent(skip int, level string, attr map[string]string, format string, params ...interface{}) *event {
+	pc, file, line, ok := runtime.Caller(skip)
+	if !ok {
+		file = "?"
+		line = 0
+	}
+	funcname := "?"
+	if callerFunc := runtime.FuncForPC(pc); callerFunc != nil {
+		funcname = callerFunc.Name()
+	}
+	return &event{
+		level:     level,
+		message:   fmt.Sprintf(format, params...),
+		file:      file,
+		line:      strconv.Itoa(int(line)),
+		timestamp: time.Now(),
+		funcname:  funcname,
+		attr:      attr,
+	}
+}
+
+type fieldFormatter interface {
+	format(*event) string
+}
+
+type basicFieldFormatter func(*event) string
+
+func (formatter basicFieldFormatter) format(e *event) string {
+	if formatter == nil {
+		return ""
+	}
+	return formatter(e)
+}
+
+type attrFieldFormatter string
+
+func (formatter attrFieldFormatter) format(e *event) string {
+	if e.attr == nil {
+		return ""
+	}
+	return e.attr[string(formatter)]
+}
+
+var (
+	fieldFormatters = map[string]basicFieldFormatter{
+		"level":    func(e *event) string { return e.level },
+		"message":  func(e *event) string { return e.message },
+		"filepath": func(e *event) string { return e.file },
+		"filename": func(e *event) string { return filepath.Base(e.file) },
+		"line":     func(e *event) string { return e.line },
+		"time":     func(e *event) string { return e.timestamp.Format("2006-01-02:15:04:05-0700") },
+		"func":     func(e *event) string { return e.funcname },
+		"funcname": func(e *event) string { return e.funcname[strings.LastIndex(e.funcname, ".")+1:] },
+	}
+	fieldRegexp, _ = regexp.Compile("%[0-9a-zA-Z.]+")
 )
 
-type FieldFormatter interface {
-	Format(*event, string) string
-}
-
-type timeFormatter string
-
-func (formatter *timeFormatter) Format(ev *event) string {
-	return ev.timestamp.Format(formatter.format)
-}
-
 type Formatter struct {
-	Format string
-	fields []FieldFormatter
+	Format  string
+	pattern string
+	fields  []fieldFormatter
 }
 
 func (formatter *Formatter) Initialize() error {
-	fieldNames := fieldRegexp.FindAllString(formatter.format)
-	if fieldNames == nil {
-		return nil
-	}
-	formatter.fields = make([]FieldFormatter, len(fieldNames))
-	for i, fieldName := range fieldNames {
-		var found bool
-		fieldName = fieldName[2 : len(fieldName)-1]
-		if formatter.fields[i], found = fieldFormatters[fieldName]; !found {
-			if pos := strings.Index(fieldName, "."); pos > 0 {
-				if formatter.fields[i] = fieldFormatters[fieldName[:pos+1]]; formatter.fields[i] == nil {
-					return fmt.Errorf("unknown field: %s", fieldName)
-				}
-			}
+	fields := fieldRegexp.FindAllString(formatter.Format, -1)
+	formatter.fields = make([]fieldFormatter, len(fields))
+	for i, field := range fields {
+		if formatter.fields[i] = fieldFormatters[field[1:]]; formatter.fields[i] == nil {
+			formatter.fields[i] = attrFieldFormatter(field[1:])
 		}
 	}
-	formatter.format = fieldRegexp.ReplaceAllString(formatter.format, "%s")
+	formatter.pattern = fieldRegexp.ReplaceAllString(formatter.Format, "%s") + "\n"
 	return nil
 }
 
-func (formatter *Formatter) Format(event *Event) string {
+func (formatter *Formatter) format(e *event) string {
 	fields := make([]interface{}, len(formatter.fields))
 	for i, fieldFormatter := range formatter.fields {
-		fields[i] = fieldFormatter(event)
+		fields[i] = fieldFormatter.format(e)
 	}
-	return fmt.Sprintf(formatter.format, fields...)
+	return fmt.Sprintf(formatter.pattern, fields...)
 }
