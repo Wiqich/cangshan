@@ -3,8 +3,8 @@ package sql
 import (
 	"errors"
 	"fmt"
-	"github.com/chenxing/cangshan/client/sql"
-	"github.com/chenxing/cangshan/logging"
+	"github.com/yangchenxing/cangshan/client/sql"
+	"github.com/yangchenxing/cangshan/logging"
 	"time"
 )
 

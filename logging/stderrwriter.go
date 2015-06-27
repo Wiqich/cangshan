@@ -1,7 +1,7 @@
 package logging
 
 import (
-	"github.com/chenxing/cangshan/application"
+	"github.com/yangchenxing/cangshan/application"
 	"github.com/mgutz/ansi"
 	"os"
 	"sync"

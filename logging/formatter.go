@@ -2,7 +2,7 @@ package logging
 
 import (
 	"fmt"
-	"github.com/chenxing/cangshan/application"
+	"github.com/yangchenxing/cangshan/application"
 	"path/filepath"
 	"reflect"
 	"regexp"
