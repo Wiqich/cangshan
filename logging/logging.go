@@ -82,10 +82,10 @@ func Flush() {
 }
 
 func LogSkip(skip int, level string, format string, params ...interface{}) {
-	LogSkipWithAttr(skip+1, level, nil, format, params...)
+	LogEx(skip+1, level, nil, nil, format, params...)
 }
 
-func LogSkipWithAttr(skip int, level string, attr map[string]string, format string, params ...interface{}) {
+func LogEx(skip int, level string, formatter *Formatter, attr map[string]interface{}, format string, params ...interface{}) {
 	if globalLogging != nil && len(globalLogging.handlers[level]) == 0 {
 		fmt.Println("not ready")
 		return
@@ -100,7 +100,7 @@ func LogSkipWithAttr(skip int, level string, attr map[string]string, format stri
 		cache.PushBack(e)
 	} else {
 		for _, handler := range globalLogging.handlers[level] {
-			handler.write(e)
+			handler.write(e, formatter)
 		}
 	}
 }

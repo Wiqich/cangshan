@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/chenxing/cangshan/application"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -25,10 +26,10 @@ type event struct {
 	line      string
 	timestamp time.Time
 	funcname  string
-	attr      map[string]string
+	attr      map[string]interface{}
 }
 
-func newEvent(skip int, level string, attr map[string]string, format string, params ...interface{}) *event {
+func newEvent(skip int, level string, attr map[string]interface{}, format string, params ...interface{}) *event {
 	pc, file, line, ok := runtime.Caller(skip)
 	if !ok {
 		file = "?"
@@ -66,9 +67,47 @@ type attrFieldFormatter string
 
 func (formatter attrFieldFormatter) format(e *event) string {
 	if e.attr == nil {
-		return ""
+		return "!MISSING!"
+	} else if i := e.attr[string(formatter)]; i == nil {
+		return "!MISSING!"
+	} else {
+		switch v := i.(type) {
+		case int:
+			fallthrough
+		case int8:
+			fallthrough
+		case int16:
+			fallthrough
+		case int32:
+			fallthrough
+		case int64:
+			return strconv.FormatInt(int64(v), 10)
+		case uint:
+			fallthrough
+		case uint8:
+			fallthrough
+		case uint16:
+			fallthrough
+		case uint32:
+			fallthrough
+		case uint64:
+			return strconv.FormatUint(uint64(v), 10)
+		case float32:
+			fallthrough
+		case float64:
+			return strconv.FormatFloat(float64(v), 'f', 6, 64)
+		case bool:
+			return strconv.FormatBool(v)
+		case string:
+			return v
+		case time.Duration:
+			return v.String()
+		case time.Time:
+			return v.Format("2006-01-02:15:04:05-0700")
+		default:
+			return fmt.Sprintf("!UNSUPPORTED{%s}!", reflect.TypeOf(v).String())
+		}
 	}
-	return e.attr[string(formatter)]
 }
 
 var (

@@ -30,8 +30,11 @@ func (handler *Handler) Initialize() error {
 	return nil
 }
 
-func (handler *Handler) write(e *event) {
-	handler.Writer.Write([]byte(handler.Formatter.format(e)))
+func (handler *Handler) write(e *event, formatter *Formatter) {
+	if formatter == nil {
+		formatter = handler.Formatter
+	}
+	handler.Writer.Write([]byte(formatter.format(e)))
 }
 
 func createDefaultHandler() *Handler {

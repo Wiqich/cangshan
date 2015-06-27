@@ -1,8 +1,18 @@
 package webserver
 
+import (
+	"errors"
+)
+
+var (
+	ErrRewrite = errors.New("rewrite")
+	ErrStop    = errors.New("stop")
+)
+
 type HookHandler interface {
-	Handle(*Request) error
+	HandleHook(*Request) error
 }
 
-type RequestHandler struct {
+type RequestHandler interface {
+	HandleRequest(*Request)
 }
