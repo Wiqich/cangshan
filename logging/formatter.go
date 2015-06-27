@@ -72,29 +72,11 @@ func (formatter attrFieldFormatter) format(e *event) string {
 		return "!MISSING!"
 	} else {
 		switch v := i.(type) {
-		case int:
-			fallthrough
-		case int8:
-			fallthrough
-		case int16:
-			fallthrough
-		case int32:
-			fallthrough
-		case int64:
+		case int, int8, int16, int32, int64:
 			return strconv.FormatInt(int64(v), 10)
-		case uint:
-			fallthrough
-		case uint8:
-			fallthrough
-		case uint16:
-			fallthrough
-		case uint32:
-			fallthrough
-		case uint64:
+		case uint, uint8, uint16, uint32, uint64:
 			return strconv.FormatUint(uint64(v), 10)
-		case float32:
-			fallthrough
-		case float64:
+		case float32, float64:
 			return strconv.FormatFloat(float64(v), 'f', 6, 64)
 		case bool:
 			return strconv.FormatBool(v)

@@ -8,11 +8,12 @@ import (
 )
 
 type Location struct {
-	Path             string
-	PreProcessPhase  []*HookHandler
-	RequestHandler   *RequestHandler
-	PostProcessPhase []*HookHandler
-	path             *regexp.Regexp
+	Path        string
+	PreProcess  []Handler
+	Handler     Handler
+	PostProcess []Handler
+	path        *regexp.Regexp
+	handlers    []Handler
 }
 
 func (loc *Location) Initialize() error {
@@ -22,6 +23,18 @@ func (loc *Location) Initialize() error {
 		} else {
 			loc.path = path
 		}
+	}
+	loc.handlers = make([]Handler, len(loc.PreProcess)+1+len(loc.PostProcess))
+	i := 0
+	for _, handler := range loc.PreProcess {
+		loc.handlers[i] = handler
+		i += 1
+	}
+	loc.handlers[i] = requestHandlerSinglton
+	i += 1
+	for _, handler := range loc.PostProcess {
+		loc.handlers[i] = handler
+		i += 1
 	}
 	return nil
 }
@@ -50,7 +63,6 @@ type WebServer struct {
 	*http.Server
 	Locations    []Location
 	LogFormatter *logging.Formatter
-	RewriteLimit int
 }
 
 func (server *WebServer) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -58,13 +70,7 @@ func (server *WebServer) ServeHTTP(response http.ResponseWriter, request *http.R
 }
 
 func (server *WebServer) serveHTTP(request *Request) {
-	// check rewrite limitation
-	if request.rewriteCount >= server.RewriteLimit {
-		request.Error("too many rewrite")
-		request.Write(500, nil, "")
-		request.buildResponse()
-		return
-	}
+	defer request.buildResponse()
 	for _, location := range server.Locations {
 		if ok, params := location.Match(request.URL.Path); ok {
 			request.Param = make(map[string]interface{})
@@ -72,16 +78,12 @@ func (server *WebServer) serveHTTP(request *Request) {
 				request.Param[key] = value
 			}
 		}
-		for _, hook := range location.PreProcessPhase {
-			if err := hook.HandleHook(request); err == ErrRewrite {
-				request.rewriteCount += 1
+		request.handler = location.Handler
+		for _, handler := range location.handlers {
+			handler.Handle(request)
+			if request.stopped {
+				return
 			}
 		}
-		location.RequestHandler.HandleRequest(request)
-		for _, hook := range location.PostProcessPhase {
-
-		}
-		request.buildResponse()
-		break
 	}
 }

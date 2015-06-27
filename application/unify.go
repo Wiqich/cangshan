@@ -61,9 +61,7 @@ func (app *Application) unify(data interface{}, rv reflect.Value) error {
 			return unsupported(rv.Kind())
 		}
 		return app.unifyAnything(data, rv)
-	case reflect.Float32:
-		fallthrough
-	case reflect.Float64:
+	case reflect.Float32, reflect.Float64:
 		return app.unifyFloat(data, rv)
 	}
 	return unsupported(rv.Kind())

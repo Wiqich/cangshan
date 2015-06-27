@@ -4,15 +4,16 @@ import (
 	"errors"
 )
 
+type Handler interface {
+	Handle(*Request)
+}
+
+type requestHandler struct{}
+
+func (handler *requestHandler) Handler(request *Request) {
+	request.handler(request)
+}
+
 var (
-	ErrRewrite = errors.New("rewrite")
-	ErrStop    = errors.New("stop")
+	requestHandlerSinglton = new(requestHandler)
 )
-
-type HookHandler interface {
-	HandleHook(*Request) error
-}
-
-type RequestHandler interface {
-	HandleRequest(*Request)
-}

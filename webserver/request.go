@@ -19,12 +19,14 @@ type Request struct {
 	Attr         map[string]interface{}
 	Param        map[string]interface{}
 	response     http.ResponseWriter
+	handler      RequestHandler
 	status       int
 	content      bytes.Buffer
 	contentType  string
 	receiveTime  time.Time
 	logFormatter *logging.Formatter
-	rewriteCount int
+	done         bool
+	stopped      bool
 }
 
 func newRequest(request *http.Request, response http.ResponseWriter, formatter *logging.Formatter) *Request {
@@ -43,6 +45,10 @@ func (request *Request) ResponseHeader() http.Header {
 	return request.response.Header()
 }
 
+func (request *Request) SetCookie(cookie http.Cookie) {
+	http.SetCookie(request.response, cookie)
+}
+
 func (request *Request) Write(status int, content []byte, contentType string) error {
 	request.status = status
 	request.content.Reset()
@@ -59,15 +65,24 @@ func (request *Request) Write(status int, content []byte, contentType string) er
 	return nil
 }
 
+func (request *Request) Stop(status int, content []byte, contentType string) error {
+	request.stopped = true
+	return request.Write(status, content, contentType)
+}
+
 func (request *Request) buildResponse() error {
-	request.response.WriteHeader(request.status)
-	if _, err := request.response.Write(); err != nil {
-		return fmt.Errorf("Write response content fail: %s", err.Error())
+	if !done {
+		request.response.WriteHeader(request.status)
+		if _, err := request.response.Write(); err != nil {
+			return fmt.Errorf("Write response content fail: %s", err.Error())
+		}
+		request.logAccess()
+		done = true
 	}
 	return nil
 }
 
-func (request *Request) logAccess(access string) {
+func (request *Request) logAccess() {
 	request.Attr["request.method"] = request.Method
 	request.Attr["request.url"] = request.URL.String()
 	request.Attr["request.status"] = request.status
