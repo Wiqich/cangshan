@@ -1,10 +1,11 @@
 package logging
 
 import (
-	"github.com/yangchenxing/cangshan/application"
-	"github.com/mgutz/ansi"
 	"os"
 	"sync"
+
+	"github.com/mgutz/ansi"
+	"github.com/yangchenxing/cangshan/application"
 )
 
 func init() {
@@ -18,11 +19,13 @@ var (
 	stderrMutex sync.Mutex
 )
 
+// StderrWriter write log to stderr with some color
 type StderrWriter struct {
 	Color     string
 	colorFunc func(string) string
 }
 
+// Initialize the StderrWriter module for applications
 func (writer *StderrWriter) Initialize() error {
 	if writer.Color != "" {
 		writer.colorFunc = ansi.ColorFunc(writer.Color)

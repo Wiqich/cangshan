@@ -3,8 +3,9 @@ package logging
 import (
 	"container/list"
 	"fmt"
-	"github.com/yangchenxing/cangshan/application"
 	"sync"
+
+	"github.com/yangchenxing/cangshan/application"
 )
 
 func init() {
@@ -20,11 +21,13 @@ var (
 	flushMutex    sync.Mutex
 )
 
+// Logging assemble handlers for logging functions
 type Logging struct {
 	Handlers []*Handler
 	handlers map[string][]*Handler
 }
 
+// Initialize the Logging module for applications
 func (log *Logging) Initialize() error {
 	log.handlers = make(map[string][]*Handler)
 	for _, handler := range log.Handlers {
@@ -41,30 +44,37 @@ func (log *Logging) Initialize() error {
 	return nil
 }
 
+// Log write log with specified level
 func Log(level string, format string, params ...interface{}) {
 	LogSkip(2, level, format, params...)
 }
 
+// Debug write debug log
 func Debug(format string, params ...interface{}) {
 	LogSkip(2, "debug", format, params...)
 }
 
+// Info write info log
 func Info(format string, params ...interface{}) {
 	LogSkip(2, "info", format, params...)
 }
 
+// Warn write warn log
 func Warn(format string, params ...interface{}) {
 	LogSkip(2, "warn", format, params...)
 }
 
+// Error write error log
 func Error(format string, params ...interface{}) {
 	LogSkip(2, "error", format, params...)
 }
 
+// Fatal write fatal log
 func Fatal(format string, params ...interface{}) {
 	LogSkip(2, "fatal", format, params...)
 }
 
+// Flush flush cached log to global Logging instance and clean cache
 func Flush() {
 	if globalLogging == nil {
 		globalLogging = createDefaultLogging()
@@ -74,17 +84,19 @@ func Flush() {
 	for level, cache := range caches {
 		for e := cache.Front(); e != nil; e = e.Next() {
 			for _, handler := range globalLogging.handlers[level] {
-				handler.write(e.Value.(*event))
+				handler.write(e.Value.(*event), nil)
 			}
 		}
 	}
 	caches = make(map[string]*list.List)
 }
 
+// LogSkip write log with specified level and specified caller by skip argument
 func LogSkip(skip int, level string, format string, params ...interface{}) {
 	LogEx(skip+1, level, nil, nil, format, params...)
 }
 
+// LogEx is the final callee of log writing methods
 func LogEx(skip int, level string, formatter *Formatter, attr map[string]interface{}, format string, params ...interface{}) {
 	if globalLogging != nil && len(globalLogging.handlers[level]) == 0 {
 		fmt.Println("not ready")

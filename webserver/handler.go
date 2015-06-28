@@ -1,17 +1,14 @@
 package webserver
 
-import (
-	"errors"
-)
-
+// A Handler process webserver requests, modify request fields or generate response
 type Handler interface {
 	Handle(*Request)
 }
 
 type requestHandler struct{}
 
-func (handler *requestHandler) Handler(request *Request) {
-	request.handler(request)
+func (handler *requestHandler) Handle(request *Request) {
+	request.handler.Handle(request)
 }
 
 var (

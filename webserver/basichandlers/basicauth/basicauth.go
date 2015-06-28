@@ -1,24 +1,30 @@
 package basicauth
 
 import (
-	"http"
-	"github.com/yangchenxing/cangshan/webserver"
+	"fmt"
+	"net/http"
+
 	"github.com/yangchenxing/cangshan/application"
+	"github.com/yangchenxing/cangshan/webserver"
 )
 
 func init() {
-	application.RegisterModuleCreater("BasicAuth", func () interface{} { return new(BasicAuth) })
+	application.RegisterModuleCreater("BasicAuth", func() interface{} { return new(BasicAuth) })
 }
 
+// A BasicAuthenticator can authenticate username with password.
 type BasicAuthenticator interface {
-	Authenticate(string, string) bool
+	Authenticate(username, password string) bool
 }
 
+// A BasicAuth implement HTTP basic auth.
 type BasicAuth struct {
-	Authenticator *BasicAuthenticator
+	Authenticator BasicAuthenticator
 	Realm         string
 }
 
+// Handle basic auth of the request, the request should stop with 401 status if the authentication
+// fail.
 func (auth *BasicAuth) Handle(request *webserver.Request) {
 	username, password, ok := request.BasicAuth()
 	if ok && auth.Authenticator.Authenticate(username, password) {

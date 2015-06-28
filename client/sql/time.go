@@ -2,21 +2,25 @@ package sql
 
 import (
 	"database/sql/driver"
+	"fmt"
 	"time"
 )
 
 var (
-	zeroTime        time.Time
-	timeFormat      = "2006-01-02 15:04:05.999999"
+	zeroTime   time.Time
+	timeFormat = "2006-01-02 15:04:05.999999"
+	// DefaultLocation use as default location for parse datetime value in query result
 	DefaultLocation = time.Now().Location()
 )
 
+// NullTime is datetime value scanner for sql database
 type NullTime struct {
 	Time     time.Time
 	Valid    bool
 	Location *time.Location
 }
 
+// Scan raw value from sql driver to get time.Time value
 func (nt *NullTime) Scan(value interface{}) (err error) {
 	nt.Valid = false
 	if value == nil {
@@ -38,6 +42,7 @@ func (nt *NullTime) Scan(value interface{}) (err error) {
 	return fmt.Errorf("Can't convert %T to time.Time", value)
 }
 
+// Value returns raw driver's value
 func (nt *NullTime) Value() (driver.Value, error) {
 	if !nt.Valid {
 		return nil, nil

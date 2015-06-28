@@ -2,8 +2,9 @@ package logging
 
 import (
 	"errors"
-	"github.com/yangchenxing/cangshan/application"
 	"io"
+
+	"github.com/yangchenxing/cangshan/application"
 )
 
 func init() {
@@ -13,12 +14,14 @@ func init() {
 		})
 }
 
+// A Handler convert acceptable log event to string with Formatter and write to some io.Writer
 type Handler struct {
 	Formatter *Formatter
 	Levels    []string
 	Writer    io.Writer
 }
 
+// Initialize Handler module for application
 func (handler *Handler) Initialize() error {
 	if handler.Formatter == nil {
 		return errors.New("missing formatter")

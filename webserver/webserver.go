@@ -1,12 +1,14 @@
 package webserver
 
 import (
-	"bitbucket.org/yangchenxing/cangshan/logging"
 	"fmt"
 	"net/http"
 	"regexp"
+
+	"github.com/yangchenxing/cangshan/logging"
 )
 
+// A Location match requests with specified path pattern, and provide handlers to handle the request
 type Location struct {
 	Path        string
 	PreProcess  []Handler
@@ -16,36 +18,37 @@ type Location struct {
 	handlers    []Handler
 }
 
+// Initialize the Location module for application
 func (loc *Location) Initialize() error {
+	var err error
 	if loc.Path[0] == '^' || loc.Path[len(loc.Path)-1] == '$' {
-		if path, err = regexp.Compile(loc.Path); err != nil {
+		if loc.path, err = regexp.Compile(loc.Path); err != nil {
 			return fmt.Errorf("Invalid path pattern: %s", err.Error())
-		} else {
-			loc.path = path
 		}
 	}
 	loc.handlers = make([]Handler, len(loc.PreProcess)+1+len(loc.PostProcess))
 	i := 0
 	for _, handler := range loc.PreProcess {
 		loc.handlers[i] = handler
-		i += 1
+		i++
 	}
 	loc.handlers[i] = requestHandlerSinglton
-	i += 1
+	i++
 	for _, handler := range loc.PostProcess {
 		loc.handlers[i] = handler
-		i += 1
+		i++
 	}
 	return nil
 }
 
+// Match check whether the url path match the location.
+// Named groups of the matched path will be return as a map.
 func (loc *Location) Match(path string) (bool, map[string]string) {
 	if loc.path == nil {
 		if path == loc.Path {
 			return true, nil
-		} else {
-			return false, nil
 		}
+		return false, nil
 	} else if subexps := loc.path.FindStringSubmatch(path); subexps != nil {
 		params := make(map[string]string)
 		for i, name := range loc.path.SubexpNames() {
@@ -59,6 +62,7 @@ func (loc *Location) Match(path string) (bool, map[string]string) {
 	}
 }
 
+// A WebServer implements a web server module for application
 type WebServer struct {
 	*http.Server
 	Locations    []Location
@@ -66,7 +70,7 @@ type WebServer struct {
 }
 
 func (server *WebServer) ServeHTTP(response http.ResponseWriter, request *http.Request) {
-	server.Serve(newRequest(request, response, server.LogFormatter))
+	server.serveHTTP(newRequest(request, response, server.LogFormatter))
 }
 
 func (server *WebServer) serveHTTP(request *Request) {

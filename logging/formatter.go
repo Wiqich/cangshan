@@ -2,7 +2,6 @@ package logging
 
 import (
 	"fmt"
-	"github.com/yangchenxing/cangshan/application"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -10,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yangchenxing/cangshan/application"
 )
 
 func init() {
@@ -73,11 +74,11 @@ func (formatter attrFieldFormatter) format(e *event) string {
 	} else {
 		switch v := i.(type) {
 		case int, int8, int16, int32, int64:
-			return strconv.FormatInt(int64(v), 10)
+			return strconv.FormatInt(reflect.ValueOf(i).Int(), 10)
 		case uint, uint8, uint16, uint32, uint64:
-			return strconv.FormatUint(uint64(v), 10)
+			return strconv.FormatUint(reflect.ValueOf(i).Uint(), 10)
 		case float32, float64:
-			return strconv.FormatFloat(float64(v), 'f', 6, 64)
+			return strconv.FormatFloat(reflect.ValueOf(i).Float(), 'f', 6, 64)
 		case bool:
 			return strconv.FormatBool(v)
 		case string:
@@ -106,12 +107,14 @@ var (
 	fieldRegexp, _ = regexp.Compile("%[0-9a-zA-Z.]+")
 )
 
+// A Formatter converts log event to human readable string
 type Formatter struct {
 	Format  string
 	pattern string
 	fields  []fieldFormatter
 }
 
+// Initialize the Formatter module for applications
 func (formatter *Formatter) Initialize() error {
 	fields := fieldRegexp.FindAllString(formatter.Format, -1)
 	formatter.fields = make([]fieldFormatter, len(fields))

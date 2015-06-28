@@ -1,11 +1,13 @@
-package sql
+package sqlkv
 
 import (
 	"errors"
 	"fmt"
 	"github.com/yangchenxing/cangshan/client/sql"
+	"github.com/yangchenxing/cangshan/client/kv"
 	"github.com/yangchenxing/cangshan/logging"
 	"time"
+	"database/sql"
 )
 
 type SQLKV struct {
@@ -17,49 +19,51 @@ type SQLKV struct {
 	CleanInterval time.Duration
 }
 
-func (kv *SQLKV) Initialize() error {
-	if kv.CreateQuery != "" {
-        for _, query := range kv.CreateQueries {
-            if _, err := kv.DB.Exec(kv.query); err != nil {
+func (k *SQLKV) Initialize() error {
+	if k.CreateQuery != "" {
+        for _, query := range k.CreateQueries {
+            if _, err := k.DB.Exec(k.query); err != nil {
                 return fmt.Errorf("Create SQLKV table fail: %s", err.Error())
             }
         }
 	}
-	if kv.GetQuery == "" {
+	if k.GetQuery == "" {
 		return errors.New("Missing GetQuery")
-	} else if kv.SetQuery == "" {
+	} else if k.SetQuery == "" {
 		return errors.New("Missing SetQuery")
 	}
-	if kv.CleanQuery != "" {
-		go kv.autoClean()
+	if k.CleanQuery != "" {
+		go k.autoClean()
 	}
 	return nil
 }
 
-func (kv *SQLKV) Ping() error {
-	return kv.DB.Ping()
+func (k *SQLKV) Ping() error {
+	return k.DB.Ping()
 }
 
-func (kv *SQLKV) Get(key string) ([]byte, error) {
-	row := kv.DB.QueryRow(kv.GetQuery)
+func (k *SQLKV) Get(key string) ([]byte, error) {
+	row := k.DB.QueryRow(k.GetQuery)
 	var value []byte
-	if err := row.Scan(&value); err != nil {
+	if err := row.Scan(&value); err == sql.ErrNoRows {
+		return nil, kv.ErrNotFound
+	} else if err != nil {
 		return nil, err
 	} else {
 		return value, nil
 	}
 }
 
-func (kv *SQLKV) Set(key string, value []byte, maxAge time.Duration) error {
-    _, err := kv.DB.Exec(kv.SetQuery, key, value, time.Now().Add(maxAge).Unix())
+func (k *SQLKV) Set(key string, value []byte, maxAge time.Duration) error {
+    _, err := k.DB.Exec(k.SetQuery, key, value, time.Now().Add(maxAge).Unix())
     return err
 }
 
-func (kv *SQLKV) autoClean() {
+func (k *SQLKV) autoClean() {
 	for {
-		if _, err := kv.DB.Exec(CleanQuery, time.Now().Unix(); err != nil {
+		if _, err := k.DB.Exec(CleanQuery, time.Now().Unix(); err != nil {
 			logging.Error("Clean SQLKV fail: %s", err.Error())
 		}
-		time.Sleep(kv.CleanInterval)
+		time.Sleep(k.CleanInterval)
 	}
 }
