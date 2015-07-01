@@ -9,7 +9,10 @@ import (
 )
 
 func init() {
-	application.RegisterModuleCreater("BasicAuth", func() interface{} { return new(BasicAuth) })
+	application.RegisterModuleCreater("WebServerBasicAuthHandler",
+		func() interface{} {
+			return new(BasicAuth)
+		})
 }
 
 // A BasicAuthenticator can authenticate username with password.

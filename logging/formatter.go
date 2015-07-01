@@ -14,10 +14,7 @@ import (
 )
 
 func init() {
-	application.RegisterModuleCreater("LogFormatter",
-		func() interface{} {
-			return new(Formatter)
-		})
+	application.RegisterModulePrototype("LogFormatter", new(Formatter))
 }
 
 type event struct {

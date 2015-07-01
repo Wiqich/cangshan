@@ -10,11 +10,13 @@ import (
 )
 
 func init() {
-	application.RegisterModuleCreater("SQLDB", func() interface{} { return new(DB) })
+	application.RegisterModulePrototype("SQLDB", new(DB))
 }
 
 var (
 	lineSeperator = regexp.MustCompile("[\n\t ]+")
+	ErrNoRows     = gosql.ErrNoRows
+	ErrTxDone     = gosql.ErrTxDone
 )
 
 func normalizeSQLQuery(query string) string {

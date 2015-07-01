@@ -3,20 +3,17 @@ package webserver
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/yangchenxing/cangshan/logging"
 )
 
-var (
-	// MultipartMaxMemory presents max memory limitation for processing a post/put http request
-	MultipartMaxMemory = 2048
-)
-
 // A Request present a webserver request
 type Request struct {
 	*http.Request
+
 	Attr         map[string]interface{}
 	Param        map[string]interface{}
 	response     http.ResponseWriter
@@ -89,13 +86,25 @@ func (request *Request) buildResponse() error {
 }
 
 func (request *Request) logAccess() {
+	var err error
+	if request.Attr["request.clientip"], _, err = net.SplitHostPort(request.RemoteAddr); err != nil {
+		request.Attr["request.clientip"] = request.RemoteAddr
+	}
+	if _, found := request.Attr["request.user"]; !found {
+		request.Attr["request.user"] = "-"
+	}
+	if _, found := request.Attr["request.auth"]; !found {
+		request.Attr["request.auth"] = "-"
+	}
+	request.Attr["request.time"] = request.receiveTime.Format("[02/Jan/2006:15:04:05 -0700]")
 	request.Attr["request.method"] = request.Method
 	request.Attr["request.url"] = request.URL.String()
+	request.Attr["request.proto"] = request.Proto
 	request.Attr["request.status"] = request.status
 	request.Attr["request.bodylen"] = request.content.Len()
-	request.Attr["request.proto"] = request.Proto
+	request.Attr["request.referer"] = request.Referer()
+	request.Attr["request.useragent"] = request.UserAgent()
 	request.Attr["request.timecost"] = time.Now().Sub(request.receiveTime)
-	request.Attr["request.time"] = request.receiveTime
 	logging.LogEx(2, "access", request.logFormatter, request.Attr, "")
 }
 

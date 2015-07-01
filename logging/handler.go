@@ -8,10 +8,7 @@ import (
 )
 
 func init() {
-	application.RegisterModuleCreater("LogHandler",
-		func() interface{} {
-			return new(Handler)
-		})
+	application.RegisterModulePrototype("LogHandler", new(Handler))
 }
 
 // A Handler convert acceptable log event to string with Formatter and write to some io.Writer

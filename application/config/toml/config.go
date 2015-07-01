@@ -1,19 +1,20 @@
-package tomlconfig
+package tomlapp
 
 import (
 	"bytes"
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/yangchenxing/cangshan/application"
-	"io"
 	"io/ioutil"
+	"path/filepath"
 )
 
 type includableConfig struct {
 	Include []string
 }
 
-func LoadFile(path string) (map[string]interface{}, error) {
+func loadContent(path string) ([]byte, error) {
+	dir := filepath.Dir(path)
 	main, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read config file %s fail: %s", path, err.Error())
@@ -24,24 +25,28 @@ func LoadFile(path string) (map[string]interface{}, error) {
 	}
 	content := bytes.NewBuffer(main)
 	for _, path := range ic.Include {
-		if buf, err := ioutil.ReadFile(path); err != nil {
-			return nil, fmt.Errorf("read config included file %s fail: %s", path, err.Error())
+		path = filepath.Clean(path)
+		if path[0] != '/' {
+			path = filepath.Join(dir, path)
+		}
+		if subContent, err := loadContent(path); err != nil {
+			return nil, err
 		} else {
 			content.WriteByte('\n')
-			content.Write(buf)
+			content.Write(subContent)
 		}
 	}
-	config := make(map[string]interface{})
-	if err := toml.Unmarshal(content.Bytes(), &config); err != nil {
-		return nil, fmt.Errorf("unmarshal full toml content fail: %s", err.Error())
-	}
-	return config, nil
+	return content.Bytes(), nil
 }
 
-func NewApplication(path string) (*Application, error) {
-	if config, err := LoadFile(path); err != nil {
+func NewApplication(path string) (*application.Application, error) {
+	content, err := loadContent(path)
+	if err != nil {
 		return nil, err
-	} else {
-		return application.NewApplication(config)
 	}
+	config := make(map[string]interface{})
+	if err := toml.Unmarshal(content, &config); err != nil {
+		return nil, fmt.Errorf("unmarshal full toml content fail: %s", err.Error())
+	}
+	return application.NewApplication(config)
 }

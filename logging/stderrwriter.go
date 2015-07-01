@@ -9,10 +9,7 @@ import (
 )
 
 func init() {
-	application.RegisterModuleCreater("StderrLogWriter",
-		func() interface{} {
-			return new(StderrWriter)
-		})
+	application.RegisterModulePrototype("StderrLogWriter", new(StderrWriter))
 }
 
 var (

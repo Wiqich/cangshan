@@ -5,8 +5,14 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/yangchenxing/cangshan/application"
 	"github.com/yangchenxing/cangshan/logging"
 )
+
+func init() {
+	application.RegisterModulePrototype("WebServer", new(WebServer))
+	application.RegisterModulePrototype("WebServerLocation", new(Location))
+}
 
 // A Location match requests with specified path pattern, and provide handlers to handle the request
 type Location struct {
@@ -67,6 +73,17 @@ type WebServer struct {
 	*http.Server
 	Locations    []Location
 	LogFormatter *logging.Formatter
+}
+
+func (server *WebServer) Initialize() error {
+	if server.Server.Handler == nil {
+		server.Server.Handler = server
+	}
+	return nil
+}
+
+func (server *WebServer) Run() error {
+	return server.Server.ListenAndServe()
 }
 
 func (server *WebServer) ServeHTTP(response http.ResponseWriter, request *http.Request) {

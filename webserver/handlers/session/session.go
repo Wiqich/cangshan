@@ -5,14 +5,21 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"encoding/hex"
-	"github.com/yangchenxing/cangshan/client/kv"
-	"github.com/yangchenxing/cangshan/logging"
-	"github.com/yangchenxing/cangshan/webserver"
 	"math/rand"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/yangchenxing/cangshan/application"
+	"github.com/yangchenxing/cangshan/client/kv"
+	"github.com/yangchenxing/cangshan/logging"
+	"github.com/yangchenxing/cangshan/webserver"
 )
+
+func init() {
+	application.RegisterModulePrototype("WebServerSessionLoader", new(SessionLoader))
+	application.RegisterModulePrototype("WebServerSessionSaver", new(SessionSaver))
+}
 
 type SessionLoader struct {
 	CookieName   string
@@ -38,7 +45,7 @@ func (loader SessionLoader) Handle(request *webserver.Request) {
 		cookie.Value = sessionID
 		cookie.Path = "/"
 		cookie.Domain = request.Host
-		cookie.Expires = time.Now().Add(MaxAge)
+		cookie.Expires = time.Now().Add(loader.CookieMaxAge)
 		request.SetCookie(cookie)
 		logging.Debug("Create session %s", sessionID)
 		session = make(map[string]interface{})
@@ -73,7 +80,7 @@ func (saver SessionSaver) Handle(request *webserver.Request) {
 	var data bytes.Buffer
 	if sessionID, ok := request.Attr["sessionid"].(string); !ok {
 		logging.Error("No session id")
-	} else if session, ok = request.Attr["session"].(map[string]interface{}); !ok {
+	} else if session, ok := request.Attr["session"].(map[string]interface{}); !ok {
 		logging.Error("No session %s", sessionID)
 	} else if err := gob.NewEncoder(&data).Encode(session); err != nil {
 		logging.Error("Encode session %s data fail: %s", sessionID, err.Error())

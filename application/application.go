@@ -10,10 +10,18 @@ type moduleError struct {
 	err  error
 }
 
+var (
+	builtinModules = make(map[string]interface{})
+)
+
 type Application struct {
 	modules  map[string]interface{}
 	waitings map[string][]chan<- interface{}
 	mutex    sync.Mutex
+}
+
+func RegisterBuiltinModuleCreater(name string, module interface{}) {
+	builtinModules[name] = module
 }
 
 func NewApplication(config map[string]interface{}) (*Application, error) {
@@ -30,7 +38,7 @@ func NewApplication(config map[string]interface{}) (*Application, error) {
 			return nil, fmt.Errorf("Invalid module category %s config: not map[string]interface{}", moduleType)
 		} else {
 			for name, config := range config {
-				go app.loadModule(moduleType+"."+name, config, moduleCreater(), errChan)
+				go app.loadModule(moduleType+"."+name, config, moduleCreater.Create(), errChan)
 				count += 1
 			}
 		}
@@ -85,9 +93,13 @@ func (app *Application) loadModule(name string, config interface{}, module inter
 }
 
 func (app *Application) getModule(name string) <-chan interface{} {
+	ch := make(chan interface{}, 1)
+	if module, found := builtinModules[name]; found {
+		ch <- module
+		return ch
+	}
 	app.mutex.Lock()
 	defer app.mutex.Unlock()
-	ch := make(chan interface{}, 1)
 	if module, found := app.modules[name]; found {
 		ch <- module
 		return ch

@@ -1,18 +1,24 @@
 package sqlkv
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/yangchenxing/cangshan/client/sql"
-	"github.com/yangchenxing/cangshan/client/kv"
-	"github.com/yangchenxing/cangshan/logging"
 	"time"
-	"database/sql"
+
+	"github.com/yangchenxing/cangshan/application"
+	"github.com/yangchenxing/cangshan/client/kv"
+	"github.com/yangchenxing/cangshan/client/sql"
+	"github.com/yangchenxing/cangshan/logging"
 )
+
+func init() {
+	application.RegisterModulePrototype("SQLKV", new(SQLKV))
+}
 
 type SQLKV struct {
 	DB            *sql.DB
-	CreateQueries   []string
+	CreateQueries []string
 	GetQuery      string
 	SetQuery      string
 	CleanQuery    string
@@ -21,11 +27,11 @@ type SQLKV struct {
 
 func (k *SQLKV) Initialize() error {
 	if k.CreateQuery != "" {
-        for _, query := range k.CreateQueries {
-            if _, err := k.DB.Exec(k.query); err != nil {
-                return fmt.Errorf("Create SQLKV table fail: %s", err.Error())
-            }
-        }
+		for _, query := range k.CreateQueries {
+			if _, err := k.DB.Exec(k.query); err != nil {
+				return fmt.Errorf("Create SQLKV table fail: %s", err.Error())
+			}
+		}
 	}
 	if k.GetQuery == "" {
 		return errors.New("Missing GetQuery")
@@ -55,13 +61,13 @@ func (k *SQLKV) Get(key string) ([]byte, error) {
 }
 
 func (k *SQLKV) Set(key string, value []byte, maxAge time.Duration) error {
-    _, err := k.DB.Exec(k.SetQuery, key, value, time.Now().Add(maxAge).Unix())
-    return err
+	_, err := k.DB.Exec(k.SetQuery, key, value, time.Now().Add(maxAge).Unix())
+	return err
 }
 
 func (k *SQLKV) autoClean() {
 	for {
-		if _, err := k.DB.Exec(CleanQuery, time.Now().Unix(); err != nil {
+		if _, err := k.DB.Exec(CleanQuery, time.Now().Unix()); err != nil {
 			logging.Error("Clean SQLKV fail: %s", err.Error())
 		}
 		time.Sleep(k.CleanInterval)
