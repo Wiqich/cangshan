@@ -5,12 +5,14 @@ import (
 	"github.com/yangchenxing/cangshan/logging"
 )
 
-func WriteStandardJSONResult(request *Request, success bool, key string, value interface{}) {
+func WriteStandardJSONResult(request *Request, success bool, params ...interface{}) {
 	result := map[string]interface{}{
 		"success": success,
 	}
-	if key != "" {
-		result[key] = value
+	for i := 0; i+1 < len(params); i += 2 {
+		if key, ok := params[i].(string); ok {
+			result[key] = params[i+1]
+		}
 	}
 	content, err := json.Marshal(result)
 	if err != nil {

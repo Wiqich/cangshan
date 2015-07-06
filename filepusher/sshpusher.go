@@ -2,7 +2,6 @@ package filepusher
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"github.com/tmc/scp"
 	"github.com/yangchenxing/cangshan/logging"
@@ -17,7 +16,7 @@ var (
 )
 
 type server struct {
-	sshConfig *ssh.Config
+	sshConfig *ssh.ClientConfig
 	address   string
 }
 
@@ -32,7 +31,7 @@ type SSHPusher struct {
 }
 
 func (pusher *SSHPusher) Initialize() error {
-	pusher.servers = make([]server, len(pusher.Servers))
+	pusher.servers = make([]*server, len(pusher.Servers))
 	for i, s := range pusher.Servers {
 		submatch := serverPattern.FindStringSubmatch(s)
 		if submatch == nil {
@@ -52,9 +51,9 @@ func (pusher *SSHPusher) Initialize() error {
 			}
 		}
 		pusher.servers[i] = &server{
-			sshConfig: &ssh.Config{
+			sshConfig: &ssh.ClientConfig{
 				User: username,
-				Auth: []ssh.AuthMethod{ssh.Password(pusher.Password)},
+				Auth: []ssh.AuthMethod{ssh.Password(password)},
 			},
 			address: address,
 		}
@@ -82,12 +81,12 @@ func (pusher SSHPusher) Push(content []byte, localPath, remotePath string) error
 	for _, s := range pusher.servers {
 		go func() {
 			var err error
-			for range pusher.Retry {
+			for i := 0; i < pusher.Retry; i++ {
 				if client, err := ssh.Dial("tcp", s.address, s.sshConfig); err != nil {
 					err = fmt.Errorf("new client to server %s fail: %s", s.address, err.Error())
 				} else if session, err := client.NewSession(); err != nil {
 					err = fmt.Errorf("new session to server %s fail: %s", s.address, err.Error())
-				} else if err := scp.Copy(len(content), 0755, filename, bytes.NewReader(content), remotePath+".tmp", session); err != nil {
+				} else if err := scp.Copy(int64(len(content)), 0755, filename, bytes.NewReader(content), remotePath+".tmp", session); err != nil {
 					err = fmt.Errorf("scp to server %s fail: %s", s.address, err.Error())
 				} else if err := session.Run(fmt.Sprintf("mv %s.tmp %s", remotePath, remotePath)); err != nil {
 					err = fmt.Errorf("ssh run on server %s fail: %s", s.address, err.Error())

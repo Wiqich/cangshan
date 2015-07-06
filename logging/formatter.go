@@ -116,7 +116,8 @@ func (formatter *Formatter) Initialize() error {
 	fields := fieldRegexp.FindAllString(formatter.Format, -1)
 	formatter.fields = make([]fieldFormatter, len(fields))
 	for i, field := range fields {
-		if formatter.fields[i] = fieldFormatters[field[1:]]; formatter.fields[i] == nil {
+		var found bool
+		if formatter.fields[i], found = fieldFormatters[field[1:]]; !found {
 			formatter.fields[i] = attrFieldFormatter(field[1:])
 		}
 	}

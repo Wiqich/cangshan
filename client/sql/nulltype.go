@@ -1,10 +1,16 @@
 package sql
 
 import (
+	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
 	"time"
 )
+
+type NullInt64 gosql.NullInt64
+type NullFloat64 gosql.NullFloat64
+type NullString gosql.NullString
+type NullBool gosql.NullBool
 
 var (
 	zeroTime   time.Time

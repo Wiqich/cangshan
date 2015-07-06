@@ -1,7 +1,6 @@
 package sqlkv
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -26,9 +25,12 @@ type SQLKV struct {
 }
 
 func (k *SQLKV) Initialize() error {
-	if k.CreateQuery != "" {
+	if k.DB == nil {
+		return errors.New("Missing DB in SQLKV")
+	}
+	if len(k.CreateQueries) > 0 {
 		for _, query := range k.CreateQueries {
-			if _, err := k.DB.Exec(k.query); err != nil {
+			if _, err := k.DB.Exec(query); err != nil {
 				return fmt.Errorf("Create SQLKV table fail: %s", err.Error())
 			}
 		}
@@ -49,7 +51,7 @@ func (k *SQLKV) Ping() error {
 }
 
 func (k *SQLKV) Get(key string) ([]byte, error) {
-	row := k.DB.QueryRow(k.GetQuery)
+	row := k.DB.QueryRow(k.GetQuery, key)
 	var value []byte
 	if err := row.Scan(&value); err == sql.ErrNoRows {
 		return nil, kv.ErrNotFound
@@ -67,7 +69,7 @@ func (k *SQLKV) Set(key string, value []byte, maxAge time.Duration) error {
 
 func (k *SQLKV) autoClean() {
 	for {
-		if _, err := k.DB.Exec(CleanQuery, time.Now().Unix()); err != nil {
+		if _, err := k.DB.Exec(k.CleanQuery, time.Now().Unix()); err != nil {
 			logging.Error("Clean SQLKV fail: %s", err.Error())
 		}
 		time.Sleep(k.CleanInterval)

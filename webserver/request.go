@@ -68,9 +68,13 @@ func (request *Request) Write(status int, content []byte, contentType string) er
 
 // Stop the processing of the request and set the response status, content and content type.
 // No handler will handle the request after stopped.
-func (request *Request) Stop(status int, content []byte, contentType string) error {
+func (request *Request) WriteAndStop(status int, content []byte, contentType string) error {
 	request.stopped = true
 	return request.Write(status, content, contentType)
+}
+
+func (request *Request) Stop() {
+	request.stopped = true
 }
 
 func (request *Request) buildResponse() error {
@@ -105,7 +109,7 @@ func (request *Request) logAccess() {
 	request.Attr["request.referer"] = request.Referer()
 	request.Attr["request.useragent"] = request.UserAgent()
 	request.Attr["request.timecost"] = time.Now().Sub(request.receiveTime)
-	logging.LogEx(2, "access", request.logFormatter, request.Attr, "")
+	logging.LogEx(2, "access", nil, request.Attr, "")
 }
 
 // Debug write debug log with web server specified log formatter

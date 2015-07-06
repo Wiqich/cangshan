@@ -2,7 +2,6 @@ package logging
 
 import (
 	"container/list"
-	"fmt"
 	"sync"
 
 	"github.com/yangchenxing/cangshan/application"
@@ -10,6 +9,12 @@ import (
 
 func init() {
 	application.RegisterModulePrototype("Logging", new(Logging))
+	application.Log = Log
+	application.Debug = Debug
+	application.Info = Info
+	application.Warn = Warn
+	application.Error = Error
+	application.Fatal = Fatal
 }
 
 var (
@@ -96,7 +101,6 @@ func LogSkip(skip int, level string, format string, params ...interface{}) {
 // LogEx is the final callee of log writing methods
 func LogEx(skip int, level string, formatter *Formatter, attr map[string]interface{}, format string, params ...interface{}) {
 	if globalLogging != nil && len(globalLogging.handlers[level]) == 0 {
-		fmt.Println("not ready")
 		return
 	}
 	e := newEvent(skip+1, level, attr, format, params...)

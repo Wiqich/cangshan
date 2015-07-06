@@ -9,10 +9,8 @@ import (
 )
 
 func init() {
-	application.RegisterModuleCreater("WebServerBasicAuthHandler",
-		func() interface{} {
-			return new(BasicAuth)
-		})
+	application.RegisterModulePrototype("WebServerBasicAuthHandler", new(BasicAuth))
+	application.RegisterModulePrototype("WebServerSimpleBasicAuthenticator", new(SimpleBasicAuthenticator))
 }
 
 // A BasicAuthenticator can authenticate username with password.
@@ -35,4 +33,26 @@ func (auth *BasicAuth) Handle(request *webserver.Request) {
 	}
 	request.ResponseHeader().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, auth.Realm))
 	request.Write(http.StatusUnauthorized, nil, "")
+}
+
+type User struct {
+	Username string
+	Password string
+}
+
+type SimpleBasicAuthenticator struct {
+	Users []User
+	users map[string]string
+}
+
+func (auth *SimpleBasicAuthenticator) Initialize() error {
+	auth.users = make(map[string]string)
+	for _, u := range auth.Users {
+		auth.users[u.Username] = u.Password
+	}
+	return nil
+}
+
+func (auth *SimpleBasicAuthenticator) Authenticate(username, password string) bool {
+	return auth.users[username] == password
 }

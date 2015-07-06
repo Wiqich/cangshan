@@ -14,3 +14,9 @@ func (handler *requestHandler) Handle(request *Request) {
 var (
 	requestHandlerSinglton = new(requestHandler)
 )
+
+type SimpleHandler func(*Request)
+
+func (handler SimpleHandler) Handle(request *Request) {
+	((func(*Request))(handler))(request)
+}

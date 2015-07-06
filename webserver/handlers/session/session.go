@@ -16,15 +16,32 @@ import (
 	"github.com/yangchenxing/cangshan/webserver"
 )
 
+const (
+	DefaultSessionAttrKey   = "session"
+	DefaultSessionIDAttrKey = "sessionid"
+)
+
 func init() {
 	application.RegisterModulePrototype("WebServerSessionLoader", new(SessionLoader))
 	application.RegisterModulePrototype("WebServerSessionSaver", new(SessionSaver))
 }
 
 type SessionLoader struct {
+	SessionKey   string
+	SessionIDKey string
 	CookieName   string
 	KV           kv.KV
 	CookieMaxAge time.Duration
+}
+
+func (loader *SessionLoader) Initialize() error {
+	if loader.SessionKey == "" {
+		loader.SessionKey = DefaultSessionAttrKey
+	}
+	if loader.SessionIDKey == "" {
+		loader.SessionIDKey = DefaultSessionIDAttrKey
+	}
+	return nil
 }
 
 func (loader SessionLoader) Handle(request *webserver.Request) {
@@ -59,8 +76,8 @@ func (loader SessionLoader) Handle(request *webserver.Request) {
 			session = make(map[string]interface{})
 		}
 	}
-	request.Attr["session"] = session
-	request.Attr["sessionid"] = sessionID
+	request.Attr[loader.SessionKey] = session
+	request.Attr[loader.SessionIDKey] = sessionID
 }
 
 func generateSessionID(request *webserver.Request) string {
@@ -72,8 +89,20 @@ func generateSessionID(request *webserver.Request) string {
 }
 
 type SessionSaver struct {
+	SessionKey    string
+	SessionIDKey  string
 	KV            kv.KV
 	SessionMaxAge time.Duration
+}
+
+func (saver *SessionSaver) Initialize() error {
+	if saver.SessionKey == "" {
+		saver.SessionKey = DefaultSessionAttrKey
+	}
+	if saver.SessionIDKey == "" {
+		saver.SessionIDKey = DefaultSessionIDAttrKey
+	}
+	return nil
 }
 
 func (saver SessionSaver) Handle(request *webserver.Request) {

@@ -11,15 +11,16 @@ import (
 )
 
 func init() {
-	application.RegisterBuiltinModuleCreater("SimpleREST.SQLResource.Int64Type", new(Int64Type))
-	application.RegisterBuiltinModuleCreater("SimpleREST.SQLResource.Float64Type", new(Float64Type))
-	application.RegisterBuiltinModuleCreater("SimpleREST.SQLResource.BoolType", new(BoolType))
-	application.RegisterBuiltinModuleCreater("SimpleREST.SQLResource.StringType", new(StringType))
-	application.RegisterBuiltinModuleCreater("SimpleREST.SQLResource.NUllInt64Type", new(NUllInt64Type))
-	application.RegisterBuiltinModuleCreater("SimpleREST.SQLResource.NUllFloat64Type", new(NUllFloat64Type))
-	application.RegisterBuiltinModuleCreater("SimpleREST.SQLResource.NUllBoolType", new(NUllBoolType))
-	application.RegisterBuiltinModuleCreater("SimpleREST.SQLResource.NUllStringType", new(NUllStringType))
-	application.RegisterBuiltinModuleCreater("SimpleREST.SQLResource.NullTimeType", new(NullTimeType))
+	application.RegisterBuiltinModule("SimpleREST.SQLResource.Int64Type", new(Int64Type))
+	application.RegisterBuiltinModule("SimpleREST.SQLResource.Float64Type", new(Float64Type))
+	application.RegisterBuiltinModule("SimpleREST.SQLResource.BoolType", new(BoolType))
+	application.RegisterBuiltinModule("SimpleREST.SQLResource.StringType", new(StringType))
+	application.RegisterBuiltinModule("SimpleREST.SQLResource.NullInt64Type", new(NullInt64Type))
+	application.RegisterBuiltinModule("SimpleREST.SQLResource.NullFloat64Type", new(NullFloat64Type))
+	application.RegisterBuiltinModule("SimpleREST.SQLResource.NullBoolType", new(NullBoolType))
+	application.RegisterBuiltinModule("SimpleREST.SQLResource.NullStringType", new(NullStringType))
+	application.RegisterBuiltinModule("SimpleREST.SQLResource.DefaultNullTimeType", new(NullTime))
+	application.RegisterModulePrototype("SimpleRESTSQLResourceNullTimeType", new(NullTime))
 }
 
 type Int64Type struct{}
@@ -242,7 +243,9 @@ func (t NullStringType) Encode(i interface{}) interface{} {
 
 // Date and time types
 
-type NullTime struct{}
+type NullTime struct {
+	Format string
+}
 
 func (t NullTime) ValueHolder() interface{} {
 	return new(cssql.NullTime)
@@ -258,6 +261,9 @@ func (t NullTime) Decode(i interface{}) (interface{}, error) {
 	case string:
 		if v == "null" || v == "nil" {
 			return nil, nil
+		}
+		if t.Format != "" {
+			return time.Parse(t.Format, v)
 		}
 		switch len(v) {
 		case 8:
@@ -275,9 +281,12 @@ func (t NullTime) Decode(i interface{}) (interface{}, error) {
 }
 
 func (t NullTime) Encode(i interface{}) interface{} {
-	v := *(i.(*gosql.NullTime))
+	v := *(i.(*cssql.NullTime))
 	if !v.Valid {
 		return nil
+	}
+	if t.Format != "" {
+		return v.Time.Format(t.Format)
 	}
 	return v.Time
 }
