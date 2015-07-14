@@ -14,7 +14,7 @@ type Stmt struct {
 }
 
 // Exec executes a non-select query
-func (s *Stmt) Exec(args ...interface{}) (gosql.Result, error) {
+func (s *Stmt) Exec(args ...interface{}) (Result, error) {
 	if s.db.Debug {
 		logging.Debug("SQL: %s; %v", s.query, args)
 	}
@@ -22,17 +22,18 @@ func (s *Stmt) Exec(args ...interface{}) (gosql.Result, error) {
 }
 
 // Query multiple rows
-func (s *Stmt) Query(args ...interface{}) (*gosql.Rows, error) {
+func (s *Stmt) Query(args ...interface{}) (*Rows, error) {
 	if s.db.Debug {
 		logging.Debug("SQL: %s, %v", s.query, args)
 	}
-	return s.Stmt.Query(args...)
+	rows, err := s.Stmt.Query(args...)
+	return &Rows{rows}, err
 }
 
 // QueryRow query single row
-func (s *Stmt) QueryRow(args ...interface{}) *gosql.Row {
+func (s *Stmt) QueryRow(args ...interface{}) *Row {
 	if s.db.Debug {
 		logging.Debug("SQL: %s, %v", s.query, args)
 	}
-	return s.Stmt.QueryRow(args...)
+	return &Row{s.Stmt.QueryRow(args...)}
 }

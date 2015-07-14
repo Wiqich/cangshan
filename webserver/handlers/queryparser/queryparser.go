@@ -67,7 +67,7 @@ func (handler QueryParserHandler) Handle(request *webserver.Request) {
 				}
 				request.Debug("Decode multipart/form-data query success")
 			}
-		default:
+		case "application/x-www-form-urlencoded":
 			if err = request.ParseForm(); err != nil {
 				request.Error("解析x-www-form-urlencoded表单出错: error=\"%s\"", err.Error())
 			} else {
@@ -78,6 +78,8 @@ func (handler QueryParserHandler) Handle(request *webserver.Request) {
 				}
 				request.Debug("Decode x-www-form-urlencoded query success")
 			}
+		default:
+			request.Warn("Unsupported htto post content type: %s", contentType)
 		}
 	default:
 		request.Warn("Unsupported http method: %s", request.Method)

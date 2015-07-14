@@ -3,13 +3,19 @@ package filepusher
 import (
 	"bytes"
 	"fmt"
-	"github.com/tmc/scp"
-	"github.com/yangchenxing/cangshan/logging"
-	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"path/filepath"
 	"regexp"
+	"strings"
+
+	"github.com/yangchenxing/cangshan/application"
+	"github.com/yangchenxing/cangshan/logging"
+	"golang.org/x/crypto/ssh"
 )
+
+func init() {
+	application.RegisterModulePrototype("SSHPusher", new(SSHPusher))
+}
 
 var (
 	serverPattern = regexp.MustCompile("((?P<username>[^:]*):(?P<password>[^@])@)?(?P<address>.*)")
@@ -37,25 +43,15 @@ func (pusher *SSHPusher) Initialize() error {
 		if submatch == nil {
 			return fmt.Errorf("Invalid server: %s", s)
 		}
-		username := pusher.Username
-		password := pusher.Password
-		var address string
-		for i, name := range serverPattern.SubexpNames() {
-			switch name {
-			case "username":
-				username = submatch[i]
-			case "password":
-				password = submatch[i]
-			case "address":
-				address = submatch[i]
-			}
+		if strings.Index(s, ":") < 0 {
+			s += ":22"
 		}
 		pusher.servers[i] = &server{
 			sshConfig: &ssh.ClientConfig{
-				User: username,
-				Auth: []ssh.AuthMethod{ssh.Password(password)},
+				User: pusher.Username,
+				Auth: []ssh.AuthMethod{ssh.Password(pusher.Password)},
 			},
-			address: address,
+			address: s,
 		}
 	}
 	if pusher.Retry == 0 {
@@ -82,18 +78,27 @@ func (pusher SSHPusher) Push(content []byte, localPath, remotePath string) error
 		go func() {
 			var err error
 			for i := 0; i < pusher.Retry; i++ {
-				if client, err := ssh.Dial("tcp", s.address, s.sshConfig); err != nil {
+				var client *ssh.Client
+				logging.Debug("start dail to %s", s.address)
+				client, err = ssh.Dial("tcp", s.address, s.sshConfig)
+				if err != nil {
+					logging.Debug("dail to %s fail: %s", s.address, err.Error())
 					err = fmt.Errorf("new client to server %s fail: %s", s.address, err.Error())
-				} else if session, err := client.NewSession(); err != nil {
-					err = fmt.Errorf("new session to server %s fail: %s", s.address, err.Error())
-				} else if err := scp.Copy(int64(len(content)), 0755, filename, bytes.NewReader(content), remotePath+".tmp", session); err != nil {
-					err = fmt.Errorf("scp to server %s fail: %s", s.address, err.Error())
-				} else if err := session.Run(fmt.Sprintf("mv %s.tmp %s", remotePath, remotePath)); err != nil {
-					err = fmt.Errorf("ssh run on server %s fail: %s", s.address, err.Error())
+					continue
+				}
+				logging.Debug("dail to %s success", s.address)
+				defer client.Close()
+				if err = scp(client, content, filename, remotePath+".tmp"); err != nil {
+					err = fmt.Errorf("scp to %s fail: %s", remotePath+".tmp", err.Error())
+					continue
+				}
+				if err = run(client, fmt.Sprintf("mv %s.tmp %s", remotePath, remotePath)); err != nil {
+					err = fmt.Errorf("mv %s.tmp to %s fail: %s", remotePath, remotePath, err.Error())
+					continue
 				}
 				logging.Debug("Push to server %s:%s success", s.address, remotePath)
-				errChan <- nil
-				return
+				err = nil
+				break
 			}
 			errChan <- err
 		}()
@@ -106,4 +111,36 @@ func (pusher SSHPusher) Push(content []byte, localPath, remotePath string) error
 		}
 	}
 	return err
+}
+
+func scp(client *ssh.Client, content []byte, filename string, destination string) error {
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("New ssh session fail: %s", err.Error())
+	}
+	defer session.Close()
+	var buf bytes.Buffer
+	session.Stdin = &buf
+	fmt.Fprintf(&buf, "C%#o %d %s\n", 0755, len(content), filename)
+	buf.Write(content)
+	buf.WriteByte('\x00')
+	if err = session.Run("scp -t " + destination); err != nil {
+		logging.Debug("scp -t %s fail: %s", destination, err.Error())
+		return fmt.Errorf("run scp -t %s fail: %s", destination, err.Error())
+	}
+	logging.Debug("scp -t %s success", destination)
+	return nil
+}
+
+func run(client *ssh.Client, command string) error {
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("New ssh session fail: %s", err.Error())
+	}
+	defer session.Close()
+	if err = session.Run(command); err != nil {
+		logging.Debug("ssh %s")
+		return fmt.Errorf("Run command %s fail: %s", command, err.Error())
+	}
+	return nil
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/yangchenxing/cangshan/application"
 	"io/ioutil"
 	"path/filepath"
-	"time"
 )
 
 type includableConfig struct {
@@ -40,7 +39,7 @@ func loadContent(path string) ([]byte, error) {
 	return content.Bytes(), nil
 }
 
-func NewApplication(path string, timeout time.Duration) (*application.Application, error) {
+func NewApplication(path string) (*application.Application, error) {
 	application.RegisterNonModule("include")
 	content, err := loadContent(path)
 	if err != nil {
@@ -50,5 +49,5 @@ func NewApplication(path string, timeout time.Duration) (*application.Applicatio
 	if err := toml.Unmarshal(content, &config); err != nil {
 		return nil, fmt.Errorf("unmarshal full toml content fail: %s", err.Error())
 	}
-	return application.NewApplication(config, timeout)
+	return application.NewApplication(config)
 }

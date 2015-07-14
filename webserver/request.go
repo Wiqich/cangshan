@@ -17,7 +17,6 @@ type Request struct {
 	Attr         map[string]interface{}
 	Param        map[string]interface{}
 	response     http.ResponseWriter
-	handler      Handler
 	status       int
 	content      bytes.Buffer
 	contentType  string

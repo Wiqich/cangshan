@@ -19,7 +19,7 @@ type SimpleReport struct {
 		Name string
 		Type sqlresource.Type
 	}
-	Fields map[string]struct {
+	Fields []struct {
 		Name string
 		Type sqlresource.Type
 	}
@@ -29,11 +29,11 @@ type SimpleReport struct {
 func (report *SimpleReport) Handle(request *webserver.Request) {
 	params := make([]interface{}, len(report.Params))
 	for i, param := range report.Params {
-		if p := request.Params[param.Name]; p == nil {
-			webserver.WriteStandardJSONResult(request, false, "message", "缺少"+param.Name)
+		if p := request.Param[param.Name]; p == nil {
+			webserver.WriteStandardJSONResult(request, false, "message", fmt.Sprintf("missing param `%s`", param.Name))
 			return
 		} else if v, err := param.Type.Decode(p); err != nil {
-			webserver.WriteStandardJSONResult(request, false, "message", fmt.Sprintf("参数%s错误", param.Name))
+			webserver.WriteStandardJSONResult(request, false, "message", fmt.Sprintf("bad param `%s`", param.Name))
 			return
 		} else {
 			params[i] = v
@@ -41,8 +41,8 @@ func (report *SimpleReport) Handle(request *webserver.Request) {
 	}
 	rows, err := report.DB.Query(report.SQL, params)
 	if err != nil {
-		request.Error("查询报表出错: %s", err.Error())
-		webserver.WriteStandardJSONResult(request, false, "message", "服务器内部错误")
+		request.Error("Search report fail: %s", err.Error())
+		webserver.WriteStandardJSONResult(request, false, "message", "Server internal error")
 		return
 	}
 	row := make([]interface{}, len(report.Fields))
@@ -52,8 +52,8 @@ func (report *SimpleReport) Handle(request *webserver.Request) {
 	records := make([]map[string]interface{}, 0, 32)
 	for rows.Next() {
 		if err := rows.Scan(row...); err != nil {
-			request.Error("查询报表出错: %s", err.Error())
-			webserver.WriteStandardJSONResult(request, false, "message", "服务器内部错误")
+			request.Error("Search report fail: %s", err.Error())
+			webserver.WriteStandardJSONResult(request, false, "message", "Server internal error")
 			return
 		}
 		record := make(map[string]interface{})
@@ -65,7 +65,10 @@ func (report *SimpleReport) Handle(request *webserver.Request) {
 	if report.GroupKey != "" {
 		groups := make(map[string][]map[string]interface{})
 		for _, record := range records {
-			key := record[report.GroupKey]
+			key, ok := record[report.GroupKey].(string)
+			if !ok {
+				webserver.WriteStandardJSONResult(request, false, "message", "group key must be string")
+			}
 			group, found := groups[key]
 			if !found {
 				group = make([]map[string]interface{}, 0, 32)

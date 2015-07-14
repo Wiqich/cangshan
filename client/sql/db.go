@@ -23,6 +23,14 @@ func normalizeSQLQuery(query string) string {
 	return lineSeperator.ReplaceAllString(query, " ")
 }
 
+type Rows struct {
+	*gosql.Rows
+}
+type Row struct {
+	*gosql.Row
+}
+type Result gosql.Result
+
 // DB is a wrapper of standard sql.DB. It output query to debug log
 type DB struct {
 	*gosql.DB
@@ -53,7 +61,7 @@ func (db *DB) Begin() (*Tx, error) {
 }
 
 // Exec executes a non-select query
-func (db *DB) Exec(query string, args ...interface{}) (gosql.Result, error) {
+func (db *DB) Exec(query string, args ...interface{}) (Result, error) {
 	if db.Debug {
 		logging.Debug("SQL: query=\"%s\", params=%v", normalizeSQLQuery(query), args)
 	}
@@ -70,17 +78,18 @@ func (db *DB) Prepare(query string) (*Stmt, error) {
 }
 
 // Query multiple rows
-func (db *DB) Query(query string, args ...interface{}) (*gosql.Rows, error) {
+func (db *DB) Query(query string, args ...interface{}) (*Rows, error) {
 	if db.Debug {
 		logging.Debug("SQL: query=\"%s\", params=%v", normalizeSQLQuery(query), args)
 	}
-	return db.DB.Query(query, args...)
+	rows, err := db.DB.Query(query, args...)
+	return &Rows{rows}, err
 }
 
 // QueryRow query single row
-func (db *DB) QueryRow(query string, args ...interface{}) *gosql.Row {
+func (db *DB) QueryRow(query string, args ...interface{}) *Row {
 	if db.Debug {
 		logging.Debug("SQL: query=\"%s\", params=%v", normalizeSQLQuery(query), args)
 	}
-	return db.DB.QueryRow(query, args...)
+	return &Row{db.DB.QueryRow(query, args...)}
 }

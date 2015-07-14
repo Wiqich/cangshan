@@ -21,7 +21,7 @@ func (tx *Tx) Commit() error {
 }
 
 // Exec execute non-select query
-func (tx Tx) Exec(query string, args ...interface{}) (gosql.Result, error) {
+func (tx Tx) Exec(query string, args ...interface{}) (Result, error) {
 	if tx.db.Debug {
 		logging.Debug("SQL: %s; %v", normalizeSQLQuery(query), args)
 	}
@@ -38,19 +38,20 @@ func (tx Tx) Prepare(query string) (*Stmt, error) {
 }
 
 // Query multiple rows
-func (tx Tx) Query(query string, args ...interface{}) (*gosql.Rows, error) {
+func (tx Tx) Query(query string, args ...interface{}) (*Rows, error) {
 	if tx.db.Debug {
 		logging.Debug("SQL: %s; %v", normalizeSQLQuery(query), args)
 	}
-	return tx.Tx.Query(query, args...)
+	rows, err := tx.Tx.Query(query, args...)
+	return &Rows{rows}, err
 }
 
 // QueryRow query single row
-func (tx Tx) QueryRow(query string, args ...interface{}) *gosql.Row {
+func (tx Tx) QueryRow(query string, args ...interface{}) *Row {
 	if tx.db.Debug {
 		logging.Debug("SQL: %s; %v", normalizeSQLQuery(query), args)
 	}
-	return tx.Tx.QueryRow(query, args...)
+	return &Row{tx.Tx.QueryRow(query, args...)}
 }
 
 // Stmt transforms a non-transaction statement to a transaction statement

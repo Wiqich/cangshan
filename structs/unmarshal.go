@@ -1,82 +1,97 @@
-package application
+package structs
 
 import (
 	"encoding"
-	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
 )
+
+type UnmarshalMapValueHock func(data interface{}, rv reflect.Value) (newData interface{}, stop bool, err error)
 
 var (
 	timeType     = reflect.TypeOf(time.Time{})
 	durationType = reflect.TypeOf(time.Duration(0))
 )
 
-func (asm *assembler) unify(data interface{}, rv reflect.Value) error {
-	if v, ok := data.(string); ok && strings.HasPrefix(v, "!REF:") {
-		if name := v[5:]; name == "" {
-			return errors.New("Missing ref name.")
-		} else {
-			mod, err := asm.getModule(name)
-			if err != nil {
-				return err
-			}
-			rv.Set(reflect.ValueOf(mod))
-			return nil
-		}
+func UnmarshalMap(data interface{}, value interface{}) error {
+	return unmarshaler{nil}.unmarshal(data, rvalue(value))
+}
+
+func UnmarshalMapWithHock(data interface{}, value interface{}, hock UnmarshalMapValueHock) error {
+	return unmarshaler{hock}.unmarshal(data, rvalue(value))
+}
+
+func UnmarshalMapValue(data interface{}, rv reflect.Value) error {
+	return unmarshaler{nil}.unmarshal(data, rv)
+}
+
+func UnmarshalMapValueWithHock(data interface{}, rv reflect.Value, hock UnmarshalMapValueHock) error {
+	return unmarshaler{hock}.unmarshal(data, rv)
+}
+
+type unmarshaler struct {
+	hock UnmarshalMapValueHock
+}
+
+func (u unmarshaler) unmarshal(data interface{}, rv reflect.Value) error {
+	var stop bool
+	var err error
+	if data, stop, err = u.invokeHock(data, rv); err != nil {
+		return err
+	} else if stop {
+		return nil
 	}
 	if rv.CanAddr() {
 		if v, ok := rv.Addr().Interface().(encoding.TextUnmarshaler); ok {
-			return asm.unifyText(data, v)
+			return u.unmarshalText(data, v)
 		}
 	}
 	if rv.Type() == timeType {
-		return asm.unifyTime(data, rv)
+		return u.unmarshalTime(data, rv)
 	}
 	if rv.Type() == durationType {
-		return asm.unifyDuration(data, rv)
+		return u.unmarshalDuration(data, rv)
 	}
 
 	k := rv.Kind()
 
 	if k >= reflect.Int && k <= reflect.Uint64 {
-		return asm.unifyInt(data, rv)
+		return u.unmarshalInt(data, rv)
 	}
 	switch k {
 	case reflect.Ptr:
 		elem := reflect.New(rv.Type().Elem())
-		if err := asm.unify(data, reflect.Indirect(elem)); err != nil {
+		if err := u.unmarshal(data, reflect.Indirect(elem)); err != nil {
 			return err
 		}
 		rv.Set(elem)
 		return nil
 	case reflect.Struct:
-		return asm.unifyStruct(data, rv)
+		return u.unmarshalStruct(data, rv)
 	case reflect.Map:
-		return asm.unifyMap(data, rv)
+		return u.unmarshalMap(data, rv)
 	case reflect.Array:
-		return asm.unifyArray(data, rv)
+		return u.unmarshalArray(data, rv)
 	case reflect.Slice:
-		return asm.unifySlice(data, rv)
+		return u.unmarshalSlice(data, rv)
 	case reflect.String:
-		return asm.unifyString(data, rv)
+		return u.unmarshalString(data, rv)
 	case reflect.Interface:
 		if rv.NumMethod() > 0 {
 			return unsupported(rv.Kind())
 		}
-		return asm.unifyAnything(data, rv)
+		return u.unmarshalAnything(data, rv)
 	case reflect.Float32, reflect.Float64:
-		return asm.unifyFloat(data, rv)
+		return u.unmarshalFloat(data, rv)
 	case reflect.Bool:
-		return asm.unifyBool(data, rv)
+		return u.unmarshalBool(data, rv)
 	}
 	return unsupported(rv.Kind())
 }
 
-func (asm *assembler) unifyStruct(data interface{}, rv reflect.Value) error {
-	// fmt.Println("unifyStruct:", data, rv)
+func (u unmarshaler) unmarshalStruct(data interface{}, rv reflect.Value) error {
+	// fmt.Println("unmarshalStruct:", data, rv)
 	mapping, ok := data.(map[string]interface{})
 	if !ok {
 		return mismatch(rv, "map", mapping)
@@ -84,7 +99,7 @@ func (asm *assembler) unifyStruct(data interface{}, rv reflect.Value) error {
 
 	fields := cachedTypeFields(rv.Type())
 	for key, value := range mapping {
-		// fmt.Println("unifyStruct.field:", key, value)
+		// fmt.Println("unmarshalStruct.field:", key, value)
 		f := fields[key]
 		if f == nil {
 			continue
@@ -97,23 +112,18 @@ func (asm *assembler) unifyStruct(data interface{}, rv reflect.Value) error {
 				sv = sv.Field(i)
 			}
 		}
-		if s, ok := value.(string); ok && strings.HasPrefix(s, "!REF:") {
-			if name := s[5:]; name == "" {
-				return errors.New("Missing ref name.")
-			} else {
-				mod, err := asm.getModule(name)
-				if err != nil {
-					return fmt.Errorf("unify field %s fail: %s", key, err.Error())
-				}
-				sv.Set(reflect.ValueOf(mod))
-				continue
-			}
+		var stop bool
+		var err error
+		if value, stop, err = u.invokeHock(value, sv); err != nil {
+			return err
+		} else if stop {
+			continue
 		} else {
 			sv = indirect(sv)
 		}
 		if unifiable(sv) {
-			if err := asm.unify(value, sv); err != nil {
-				return fmt.Errorf("unify field %s fail: %s", key, err.Error())
+			if err := u.unmarshal(value, sv); err != nil {
+				return fmt.Errorf("unmarshal field %s fail: %s", key, err.Error())
 			}
 		} else {
 			return fmt.Errorf("Field '%s.%s' is unexported, and therefore cannot be loaded with reflection.", rv.Type().String(), key)
@@ -122,17 +132,45 @@ func (asm *assembler) unifyStruct(data interface{}, rv reflect.Value) error {
 	return nil
 }
 
-func (asm *assembler) unifyMap(data interface{}, rv reflect.Value) error {
-	mapping, ok := data.(map[string]interface{})
+func (u unmarshaler) unmarshalSliceMap(data interface{}, rv reflect.Value) bool {
+	slice, ok := data.([]interface{})
 	if !ok {
-		return badtype("map", mapping)
+		return false
+	}
+	if rv.IsNil() {
+		rv.Set(reflect.MakeMap(rv.Type()))
+	}
+	for _, item := range slice {
+		rvKey := indirect(reflect.New(rv.Type().Key()))
+		rvValue := indirect(reflect.New(rv.Type().Elem()))
+		if itemMap, ok := item.(map[string]interface{}); !ok {
+			return false
+		} else if key, found := itemMap["key"]; !found {
+			return false
+		} else if value, found := itemMap["value"]; !found {
+			return false
+		} else if err := u.unmarshal(key, rvKey); err != nil {
+			return false
+		} else if err := u.unmarshal(value, rvValue); err != nil {
+			return false
+		} else {
+			rv.SetMapIndex(rvKey, rvValue)
+		}
+	}
+	return true
+}
+
+func (u unmarshaler) unmarshalMap(data interface{}, rv reflect.Value) error {
+	mapping, ok := data.(map[string]interface{})
+	if !ok && !u.unmarshalSliceMap(data, rv) {
+		return badtype("map", data)
 	}
 	if rv.IsNil() {
 		rv.Set(reflect.MakeMap(rv.Type()))
 	}
 	for key, value := range mapping {
 		rvval := reflect.Indirect(reflect.New(rv.Type().Elem()))
-		if err := asm.unify(value, rvval); err != nil {
+		if err := u.unmarshal(value, rvval); err != nil {
 			return err
 		}
 		rv.SetMapIndex(reflect.ValueOf(key), rvval)
@@ -140,7 +178,7 @@ func (asm *assembler) unifyMap(data interface{}, rv reflect.Value) error {
 	return nil
 }
 
-func (asm *assembler) unifyArray(data interface{}, rv reflect.Value) error {
+func (u unmarshaler) unmarshalArray(data interface{}, rv reflect.Value) error {
 	lv := reflect.ValueOf(data)
 	if lv.Kind() != reflect.Slice {
 		return badtype("slice", data)
@@ -149,10 +187,10 @@ func (asm *assembler) unifyArray(data interface{}, rv reflect.Value) error {
 		return fmt.Errorf("Expected array length %d but got array of length %d",
 			rv.Len(), lv.Len())
 	}
-	return asm.unifySliceArray(lv, rv)
+	return u.unmarshalSliceArray(lv, rv)
 }
 
-func (asm *assembler) unifySlice(data interface{}, rv reflect.Value) error {
+func (u unmarshaler) unmarshalSlice(data interface{}, rv reflect.Value) error {
 	lv := reflect.ValueOf(data)
 	if lv.Kind() != reflect.Slice {
 		return badtype("slice", data)
@@ -163,33 +201,23 @@ func (asm *assembler) unifySlice(data interface{}, rv reflect.Value) error {
 		}
 		rv.Set(reflect.MakeSlice(rv.Type(), lv.Len(), lv.Len()))
 	}
-	return asm.unifySliceArray(lv, rv)
+	return u.unmarshalSliceArray(lv, rv)
 }
 
-func (asm *assembler) unifySliceArray(lv, rv reflect.Value) error {
+func (u unmarshaler) unmarshalSliceArray(lv, rv reflect.Value) error {
 	for i, sliceLen := 0, lv.Len(); i < sliceLen; i++ {
-		if s, ok := lv.Index(i).Interface().(string); ok {
-			if strings.HasPrefix(s, "!REF:") {
-				if name := s[5:]; name == "" {
-					return errors.New("Missing ref name.")
-				} else {
-					mod, err := asm.getModule(name)
-					if err != nil {
-						return fmt.Errorf("unify slice index %d fail: %s", i, err.Error())
-					}
-					rv.Index(i).Set(reflect.ValueOf(mod))
-					continue
-				}
-			}
-		}
-		if err := asm.unify(lv.Index(i).Interface(), indirect(rv.Index(i))); err != nil {
+		if value, stop, err := u.invokeHock(lv.Index(i).Interface(), rv.Index(i)); err != nil {
+			return err
+		} else if stop {
+			continue
+		} else if err := u.unmarshal(value, indirect(rv.Index(i))); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (asm *assembler) unifyString(data interface{}, rv reflect.Value) error {
+func (u unmarshaler) unmarshalString(data interface{}, rv reflect.Value) error {
 	if s, ok := data.(string); ok {
 		rv.SetString(s)
 		return nil
@@ -197,7 +225,7 @@ func (asm *assembler) unifyString(data interface{}, rv reflect.Value) error {
 	return badtype("string", data)
 }
 
-func (asm *assembler) unifyTime(data interface{}, rv reflect.Value) error {
+func (u unmarshaler) unmarshalTime(data interface{}, rv reflect.Value) error {
 	switch v := data.(type) {
 	case time.Time:
 		rv.Set(reflect.ValueOf(v))
@@ -211,7 +239,7 @@ func (asm *assembler) unifyTime(data interface{}, rv reflect.Value) error {
 	return badtype("time.Time", data)
 }
 
-func (asm *assembler) unifyDuration(data interface{}, rv reflect.Value) error {
+func (u unmarshaler) unmarshalDuration(data interface{}, rv reflect.Value) error {
 	switch v := data.(type) {
 	case time.Duration:
 		rv.Set(reflect.ValueOf(v))
@@ -227,7 +255,7 @@ func (asm *assembler) unifyDuration(data interface{}, rv reflect.Value) error {
 	return nil
 }
 
-func (asm *assembler) unifyFloat(data interface{}, rv reflect.Value) error {
+func (u unmarshaler) unmarshalFloat(data interface{}, rv reflect.Value) error {
 	lv := reflect.ValueOf(data)
 	lk := lv.Kind()
 	switch {
@@ -243,7 +271,7 @@ func (asm *assembler) unifyFloat(data interface{}, rv reflect.Value) error {
 	return nil
 }
 
-func (asm *assembler) unifyInt(data interface{}, rv reflect.Value) error {
+func (u unmarshaler) unmarshalInt(data interface{}, rv reflect.Value) error {
 	lv := reflect.ValueOf(data)
 	lk := lv.Kind()
 	rk := rv.Kind()
@@ -271,7 +299,7 @@ func (asm *assembler) unifyInt(data interface{}, rv reflect.Value) error {
 	return nil
 }
 
-func (asm *assembler) unifyBool(data interface{}, rv reflect.Value) error {
+func (u unmarshaler) unmarshalBool(data interface{}, rv reflect.Value) error {
 	if b, ok := data.(bool); ok {
 		rv.SetBool(b)
 		return nil
@@ -279,13 +307,13 @@ func (asm *assembler) unifyBool(data interface{}, rv reflect.Value) error {
 	return badtype("boolean", data)
 }
 
-func (asm *assembler) unifyAnything(data interface{}, rv reflect.Value) error {
+func (u unmarshaler) unmarshalAnything(data interface{}, rv reflect.Value) error {
 	rv.Set(reflect.ValueOf(data))
 	return nil
 }
 
 // copy from BurntSushi/toml
-func (asm *assembler) unifyText(data interface{}, v encoding.TextUnmarshaler) error {
+func (u unmarshaler) unmarshalText(data interface{}, v encoding.TextUnmarshaler) error {
 	var s string
 	switch sdata := data.(type) {
 	case encoding.TextMarshaler:
@@ -365,4 +393,12 @@ func indirect(v reflect.Value) reflect.Value {
 		v.Set(reflect.New(v.Type().Elem()))
 	}
 	return indirect(reflect.Indirect(v))
+}
+
+func (u unmarshaler) invokeHock(data interface{}, rv reflect.Value) (interface{}, bool, error) {
+	if u.hock == nil {
+		return data, false, nil
+	} else {
+		return u.hock(data, rv)
+	}
 }
