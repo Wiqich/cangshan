@@ -14,19 +14,19 @@ var (
 	durationType = reflect.TypeOf(time.Duration(0))
 )
 
-func UnmarshalMap(data interface{}, value interface{}) error {
+func Unmarshal(data interface{}, value interface{}) error {
 	return unmarshaler{nil}.unmarshal(data, rvalue(value))
 }
 
-func UnmarshalMapWithHock(data interface{}, value interface{}, hock UnmarshalMapValueHock) error {
+func UnmarshalWithHock(data interface{}, value interface{}, hock UnmarshalMapValueHock) error {
 	return unmarshaler{hock}.unmarshal(data, rvalue(value))
 }
 
-func UnmarshalMapValue(data interface{}, rv reflect.Value) error {
+func UnmarshalValue(data interface{}, rv reflect.Value) error {
 	return unmarshaler{nil}.unmarshal(data, rv)
 }
 
-func UnmarshalMapValueWithHock(data interface{}, rv reflect.Value, hock UnmarshalMapValueHock) error {
+func UnmarshalValueWithHock(data interface{}, rv reflect.Value, hock UnmarshalMapValueHock) error {
 	return unmarshaler{hock}.unmarshal(data, rv)
 }
 
@@ -132,38 +132,35 @@ func (u unmarshaler) unmarshalStruct(data interface{}, rv reflect.Value) error {
 	return nil
 }
 
-func (u unmarshaler) unmarshalSliceMap(data interface{}, rv reflect.Value) bool {
-	slice, ok := data.([]interface{})
-	if !ok {
-		return false
+func (u unmarshaler) unmarshalSliceMap(data interface{}, rv reflect.Value) error {
+	var items []struct {
+		Key   interface{}
+		Value interface{}
+	}
+	if err := u.unmarshal(data, rvalue(&items)); err != nil {
+		return err
 	}
 	if rv.IsNil() {
 		rv.Set(reflect.MakeMap(rv.Type()))
 	}
-	for _, item := range slice {
+	for _, item := range items {
 		rvKey := indirect(reflect.New(rv.Type().Key()))
 		rvValue := indirect(reflect.New(rv.Type().Elem()))
-		if itemMap, ok := item.(map[string]interface{}); !ok {
-			return false
-		} else if key, found := itemMap["key"]; !found {
-			return false
-		} else if value, found := itemMap["value"]; !found {
-			return false
-		} else if err := u.unmarshal(key, rvKey); err != nil {
-			return false
-		} else if err := u.unmarshal(value, rvValue); err != nil {
-			return false
-		} else {
-			rv.SetMapIndex(rvKey, rvValue)
+		if err := u.unmarshal(item.Key, rvKey); err != nil {
+			return fmt.Errorf("invalid key: %s", err.Error())
 		}
+		if err := u.unmarshal(item.Value, rvValue); err != nil {
+			return fmt.Errorf("invalid value: %s", err.Error())
+		}
+		rv.SetMapIndex(rvKey, rvValue)
 	}
-	return true
+	return nil
 }
 
 func (u unmarshaler) unmarshalMap(data interface{}, rv reflect.Value) error {
 	mapping, ok := data.(map[string]interface{})
-	if !ok && !u.unmarshalSliceMap(data, rv) {
-		return badtype("map", data)
+	if !ok {
+		return u.unmarshalSliceMap(data, rv)
 	}
 	if rv.IsNil() {
 		rv.Set(reflect.MakeMap(rv.Type()))

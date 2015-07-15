@@ -6,7 +6,6 @@ import (
 
 var (
 	moduleCreaters = make(map[string]ModuleCreater)
-	nonModules     = make(map[string]bool)
 )
 
 type ModuleCreater interface {
@@ -19,10 +18,6 @@ type Initializable interface {
 
 type Runable interface {
 	Run() error
-}
-
-func RegisterNonModule(name string) {
-	nonModules[name] = true
 }
 
 func RegisterModuleCreater(name string, creater ModuleCreater) {

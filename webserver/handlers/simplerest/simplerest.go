@@ -13,23 +13,23 @@ func init() {
 }
 
 type Resource interface {
-	Get(query map[string]interface{}) (map[string]interface{}, error)
-	Search(query map[string]interface{}) ([]map[string]interface{}, error)
-	Create(query map[string]interface{}, before, after Trigger) (map[string]interface{}, error)
-	Update(query map[string]interface{}, before, after Trigger) (map[string]interface{}, error)
+	Get(query map[string]interface{}, request *webserver.Request) (map[string]interface{}, error)
+	Search(query map[string]interface{}, request *webserver.Request) ([]map[string]interface{}, error)
+	Create(query map[string]interface{}, before, after []Trigger, request *webserver.Request) (map[string]interface{}, error)
+	Update(query map[string]interface{}, before, after []Trigger, request *webserver.Request) (map[string]interface{}, error)
 }
 
 type Trigger interface {
-	Handle(table string, oldEntity, newEntity map[string]interface{}) error
+	Handle(table string, oldEntity, newEntity map[string]interface{}, request *webserver.Request) error
 }
 
 type SimpleREST struct {
 	Resource Resource
 	Triggers struct {
-		BeforeCreate Trigger
-		AfterCreate  Trigger
-		BeforeUpdate Trigger
-		AfterUpdate  Trigger
+		BeforeCreate []Trigger
+		AfterCreate  []Trigger
+		BeforeUpdate []Trigger
+		AfterUpdate  []Trigger
 	}
 }
 
@@ -41,7 +41,7 @@ func (handler SimpleREST) Handle(request *webserver.Request) {
 	}
 	switch method {
 	case "Get":
-		entity, err := handler.Resource.Get(request.Param)
+		entity, err := handler.Resource.Get(request.Param, request)
 		if err != nil {
 			logging.Error("Get entity fail: %s", err.Error())
 			webserver.WriteStandardJSONResult(request, false, "message", err.Error())
@@ -51,7 +51,7 @@ func (handler SimpleREST) Handle(request *webserver.Request) {
 			webserver.WriteStandardJSONResult(request, true, "entities", []interface{}{entity})
 		}
 	case "Search":
-		entities, err := handler.Resource.Search(request.Param)
+		entities, err := handler.Resource.Search(request.Param, request)
 		if err != nil {
 			logging.Error("Search entity fail: %s", err.Error())
 			webserver.WriteStandardJSONResult(request, false, "message", err.Error())
@@ -60,7 +60,7 @@ func (handler SimpleREST) Handle(request *webserver.Request) {
 		}
 	case "Create":
 		entity, err := handler.Resource.Create(request.Param,
-			handler.Triggers.BeforeCreate, handler.Triggers.AfterCreate)
+			handler.Triggers.BeforeCreate, handler.Triggers.AfterCreate, request)
 		if err != nil {
 			logging.Error("Search entity fail: %s", err.Error())
 			webserver.WriteStandardJSONResult(request, false, "message", err.Error())
@@ -69,7 +69,7 @@ func (handler SimpleREST) Handle(request *webserver.Request) {
 		}
 	case "Update":
 		entity, err := handler.Resource.Create(request.Param,
-			handler.Triggers.BeforeUpdate, handler.Triggers.AfterUpdate)
+			handler.Triggers.BeforeUpdate, handler.Triggers.AfterUpdate, request)
 		if err != nil {
 			logging.Error("Update entity fail: %s", err.Error())
 			webserver.WriteStandardJSONResult(request, false, "message", err.Error())

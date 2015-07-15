@@ -2,6 +2,7 @@ package logging
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
 
 	"github.com/yangchenxing/cangshan/application"
@@ -85,6 +86,7 @@ func Flush() {
 	defer flushMutex.Unlock()
 	for level, cache := range caches {
 		for e := cache.Front(); e != nil; e = e.Next() {
+			fmt.Println(e)
 			for _, handler := range globalLogging.handlers[level] {
 				handler.write(e.Value.(*event), nil)
 			}

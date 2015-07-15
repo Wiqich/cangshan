@@ -2,13 +2,16 @@ package filepusher
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
-	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/yangchenxing/cangshan/application"
+	"github.com/yangchenxing/cangshan/client/coordination"
 	"github.com/yangchenxing/cangshan/logging"
 	"golang.org/x/crypto/ssh"
 )
@@ -17,50 +20,57 @@ func init() {
 	application.RegisterModulePrototype("SSHPusher", new(SSHPusher))
 }
 
-var (
-	serverPattern = regexp.MustCompile("((?P<username>[^:]*):(?P<password>[^@])@)?(?P<address>.*)")
-)
-
 type server struct {
 	sshConfig *ssh.ClientConfig
 	address   string
 }
 
 type SSHPusher struct {
-	Servers    []string
-	LocalPath  string
-	RemotePath string
-	Username   string
-	Password   string
-	Retry      int
-	servers    []*server
+	sync.Mutex
+	Coordination      coordination.Coordination
+	ClusterName       string
+	LocalPath         string
+	RemotePath        string
+	Username          string
+	Password          string
+	Retry             int
+	WaitRetryInterval time.Duration
+	servers           map[string]*ssh.ClientConfig
+	clientConfig      *ssh.ClientConfig
 }
 
 func (pusher *SSHPusher) Initialize() error {
-	pusher.servers = make([]*server, len(pusher.Servers))
-	for i, s := range pusher.Servers {
-		submatch := serverPattern.FindStringSubmatch(s)
-		if submatch == nil {
-			return fmt.Errorf("Invalid server: %s", s)
-		}
-		if strings.Index(s, ":") < 0 {
-			s += ":22"
-		}
-		pusher.servers[i] = &server{
-			sshConfig: &ssh.ClientConfig{
-				User: pusher.Username,
-				Auth: []ssh.AuthMethod{ssh.Password(pusher.Password)},
-			},
-			address: s,
+	if pusher.Coordination == nil {
+		return errors.New("Missing Coordination")
+	} else if pusher.ClusterName == "" {
+		return errors.New("Missing ClusterName")
+	}
+	pusher.clientConfig = &ssh.ClientConfig{
+		User: pusher.Username,
+		Auth: []ssh.AuthMethod{ssh.Password(pusher.Password)},
+	}
+	pusher.servers = make(map[string]*ssh.ClientConfig)
+	if nodes, err := pusher.Coordination.Discover(pusher.ClusterName); err != nil {
+		return fmt.Errorf("Cannot discover cluster %s", pusher.ClusterName)
+	} else {
+		for _, node := range nodes {
+			addr := node.Key
+			if strings.Index(addr, ":") < 0 {
+				addr += ":22"
+			}
+			pusher.servers[addr] = pusher.clientConfig
 		}
 	}
 	if pusher.Retry == 0 {
 		pusher.Retry = 1
 	}
+	go pusher.waitChange()
 	return nil
 }
 
 func (pusher SSHPusher) Push(content []byte, localPath, remotePath string) error {
+	pusher.Lock()
+	defer pusher.Unlock()
 	if localPath != "" {
 		localPath = filepath.Join(pusher.LocalPath, localPath)
 		if err := ioutil.WriteFile(localPath, content, 0755); err != nil {
@@ -73,20 +83,20 @@ func (pusher SSHPusher) Push(content []byte, localPath, remotePath string) error
 		remotePath = pusher.RemotePath
 	}
 	filename := filepath.Base(remotePath)
-	errChan := make(chan error, len(pusher.Servers))
-	for _, s := range pusher.servers {
+	errChan := make(chan error, len(pusher.servers))
+	for addr, sshConfig := range pusher.servers {
 		go func() {
 			var err error
 			for i := 0; i < pusher.Retry; i++ {
 				var client *ssh.Client
-				logging.Debug("start dail to %s", s.address)
-				client, err = ssh.Dial("tcp", s.address, s.sshConfig)
+				logging.Debug("start dail to %s", addr)
+				client, err = ssh.Dial("tcp", addr, sshConfig)
 				if err != nil {
-					logging.Debug("dail to %s fail: %s", s.address, err.Error())
-					err = fmt.Errorf("new client to server %s fail: %s", s.address, err.Error())
+					logging.Debug("dail to %s fail: %s", addr, err.Error())
+					err = fmt.Errorf("new client to server %s fail: %s", addr, err.Error())
 					continue
 				}
-				logging.Debug("dail to %s success", s.address)
+				logging.Debug("dail to %s success", addr)
 				defer client.Close()
 				if err = scp(client, content, filename, remotePath+".tmp"); err != nil {
 					err = fmt.Errorf("scp to %s fail: %s", remotePath+".tmp", err.Error())
@@ -96,7 +106,7 @@ func (pusher SSHPusher) Push(content []byte, localPath, remotePath string) error
 					err = fmt.Errorf("mv %s.tmp to %s fail: %s", remotePath, remotePath, err.Error())
 					continue
 				}
-				logging.Debug("Push to server %s:%s success", s.address, remotePath)
+				logging.Debug("Push to server %s:%s success", addr, remotePath)
 				err = nil
 				break
 			}
@@ -104,13 +114,43 @@ func (pusher SSHPusher) Push(content []byte, localPath, remotePath string) error
 		}()
 	}
 	var err error
-	for range pusher.Servers {
+	for range pusher.servers {
 		if e := <-errChan; e != nil {
 			err = e
 			logging.Error("Push fail: %s", err.Error())
 		}
 	}
 	return err
+}
+
+func (pusher *SSHPusher) waitChange() {
+	receiveChan := make(chan *coordination.CoordinationEvent)
+	stopChan := make(chan bool)
+	errChan := make(chan error)
+	go func() {
+		errChan <- pusher.Coordination.LongWait(pusher.ClusterName, receiveChan, stopChan)
+	}()
+	for {
+		for {
+			select {
+			case event := <-receiveChan:
+				if event != nil {
+					pusher.Lock()
+					switch event.Type {
+					case coordination.CreateNodeEvent:
+						pusher.servers[event.Key] = pusher.clientConfig
+					case coordination.DeleteNodeEvent:
+						delete(pusher.servers, event.Key)
+					}
+					pusher.Unlock()
+				}
+			case err := <-errChan:
+				logging.Error("Wait change receive error: %s", err.Error())
+				break
+			}
+		}
+		time.Sleep(pusher.WaitRetryInterval)
+	}
 }
 
 func scp(client *ssh.Client, content []byte, filename string, destination string) error {

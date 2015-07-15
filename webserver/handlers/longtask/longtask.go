@@ -81,7 +81,7 @@ func (ex *LongTaskExecutive) Handle(request *webserver.Request) {
 
 type LongTaskStatus struct{}
 
-func (handler LongTaskStatus) Handler(request *webserver.Request) {
+func (handler LongTaskStatus) Handle(request *webserver.Request) {
 	outputOffset, _ := strconv.Atoi(request.Param["offset"].(string))
 	if id, ok := request.Param["id"].(string); !ok {
 		webserver.WriteStandardJSONResult(request, false, "message", "missing task id")

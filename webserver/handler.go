@@ -8,3 +8,9 @@ type Handler interface {
 type MatchHandler interface {
 	Handle(request *Request) (match bool)
 }
+
+type SimpleHandler func(*Request)
+
+func (handler SimpleHandler) Handle(request *Request) {
+	((func(*Request))(handler))(request)
+}

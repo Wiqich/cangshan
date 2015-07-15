@@ -4,11 +4,13 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/yangchenxing/cangshan/application"
 	"github.com/yangchenxing/cangshan/client/sql"
 	"github.com/yangchenxing/cangshan/logging"
+	"github.com/yangchenxing/cangshan/webserver"
 	"github.com/yangchenxing/cangshan/webserver/handlers/simplerest"
-	"strings"
 )
 
 func init() {
@@ -42,6 +44,7 @@ type Resource struct {
 		Modifiable    bool
 		Generater     ResourcePrimaryKeyGenerater
 		AutoIncrement bool
+		Validators    []simplerest.FieldValidator
 		i             int
 	}
 }
@@ -55,7 +58,7 @@ func (res *Resource) Initialize() error {
 	return nil
 }
 
-func (res *Resource) DecodeParams(param map[string]interface{}) error {
+func (res *Resource) DecodeParams(param map[string]interface{}, request *webserver.Request) error {
 	for name, f := range res.Fields {
 		v := param[name]
 		if v == nil {
@@ -64,6 +67,11 @@ func (res *Resource) DecodeParams(param map[string]interface{}) error {
 		w, err := f.Type.Decode(v)
 		if err != nil {
 			return fmt.Errorf("Decode field %s fail: %s", name, err.Error())
+		}
+		for _, validator := range f.Validators {
+			if err := validator.Validate(w, request); err != nil {
+				return fmt.Errorf("Validate field %s fail: %s", name, err.Error())
+			}
 		}
 		param[name] = w
 	}
@@ -80,9 +88,9 @@ func (res *Resource) filterParam(param map[string]interface{}) map[string]interf
 	return result
 }
 
-func (res *Resource) Get(param map[string]interface{}) (map[string]interface{}, error) {
+func (res *Resource) Get(param map[string]interface{}, request *webserver.Request) (map[string]interface{}, error) {
 	param = res.filterParam(param)
-	if err := res.DecodeParams(param); err != nil {
+	if err := res.DecodeParams(param, request); err != nil {
 		logging.Error("Decode get query param fail: %s", err.Error())
 		return nil, errGetFail
 	}
@@ -117,9 +125,9 @@ func (res *Resource) Get(param map[string]interface{}) (map[string]interface{}, 
 	return res.scanEntity(valueHolders), nil
 }
 
-func (res *Resource) Search(param map[string]interface{}) ([]map[string]interface{}, error) {
+func (res *Resource) Search(param map[string]interface{}, request *webserver.Request) ([]map[string]interface{}, error) {
 	param = res.filterParam(param)
-	if err := res.DecodeParams(param); err != nil {
+	if err := res.DecodeParams(param, request); err != nil {
 		logging.Error("Decode search query param fail: %s", err.Error())
 		return nil, errSearchFail
 	}
@@ -163,17 +171,19 @@ func (res *Resource) Search(param map[string]interface{}) ([]map[string]interfac
 	return entities, nil
 }
 
-func (res *Resource) Create(param map[string]interface{}, before, after simplerest.Trigger) (map[string]interface{}, error) {
+func (res *Resource) Create(param map[string]interface{}, before, after []simplerest.Trigger, request *webserver.Request) (map[string]interface{}, error) {
 	param = res.filterParam(param)
-	if err := res.DecodeParams(param); err != nil {
+	if err := res.DecodeParams(param, request); err != nil {
 		logging.Error("Decode create query param fail: %s", err.Error())
 		return nil, errCreateFail
 	}
 	// before creation trigger
 	if before != nil {
-		if err := before.Handle(res.Name, nil, param); err != nil {
-			logging.Error("invoke trigger before create of resource %s fail: %s", res.Name, err.Error())
-			return nil, fmt.Errorf("before create trigger fail: %s", err.Error())
+		for _, trigger := range before {
+			if err := trigger.Handle(res.Name, nil, param, request); err != nil {
+				logging.Error("invoke trigger before create of resource %s fail: %s", res.Name, err.Error())
+				return nil, fmt.Errorf("before create trigger fail: %s", err.Error())
+			}
 		}
 	}
 
@@ -228,23 +238,25 @@ func (res *Resource) Create(param map[string]interface{}, before, after simplere
 		}
 		keys[autoKeyName] = key
 	}
-	entity, err := res.Get(keys)
+	entity, err := res.Get(keys, request)
 	if err != nil {
 		return nil, errCreateFail
 	}
 	// after creation trigger
 	if after != nil {
-		if err := after.Handle(res.Name, nil, entity); err != nil {
-			logging.Error("invoke trigger after create of resource %s fail: %s", res.Name, err.Error())
-			return nil, fmt.Errorf("after create trigger fail: %s", err.Error())
+		for _, trigger := range after {
+			if err := trigger.Handle(res.Name, nil, entity, request); err != nil {
+				logging.Error("invoke trigger after create of resource %s fail: %s", res.Name, err.Error())
+				return nil, fmt.Errorf("after create trigger fail: %s", err.Error())
+			}
 		}
 	}
 	return nil, errCreateFail
 }
 
-func (res *Resource) Update(param map[string]interface{}, before, after simplerest.Trigger) (map[string]interface{}, error) {
+func (res *Resource) Update(param map[string]interface{}, before, after []simplerest.Trigger, request *webserver.Request) (map[string]interface{}, error) {
 	param = res.filterParam(param)
-	if err := res.DecodeParams(param); err != nil {
+	if err := res.DecodeParams(param, request); err != nil {
 		logging.Error("Decode update query param fail: %s", err.Error())
 		return nil, errUpdateFail
 	}
@@ -259,16 +271,18 @@ func (res *Resource) Update(param map[string]interface{}, before, after simplere
 	// prepare old entity for triggers
 	if before != nil || after != nil {
 		var err error
-		if oldEntity, err = res.Get(param); err != nil {
+		if oldEntity, err = res.Get(param, request); err != nil {
 			logging.Error("Get old %s entity %v fail: %s", res.Name, keys, err.Error())
 			return nil, errCreateFail
 		}
 	}
 	// before update trigger
 	if before != nil {
-		if err := before.Handle(res.Name, oldEntity, param); err != nil {
-			logging.Error("invoke trigger before update of resource %s fail: %s", res.Name, err.Error())
-			return nil, fmt.Errorf("before update trigger fail: %s", err.Error())
+		for _, trigger := range before {
+			if err := trigger.Handle(res.Name, oldEntity, param, request); err != nil {
+				logging.Error("invoke trigger before update of resource %s fail: %s", res.Name, err.Error())
+				return nil, fmt.Errorf("before update trigger fail: %s", err.Error())
+			}
 		}
 	}
 
@@ -300,15 +314,17 @@ func (res *Resource) Update(param map[string]interface{}, before, after simplere
 	} else if count > 1 {
 		logging.Error("More than one %s entity updated: %s", res.Name, statement)
 	}
-	entity, err := res.Get(keys)
+	entity, err := res.Get(keys, request)
 	if err != nil {
 		return nil, errUpdateFail
 	}
 	// after update trigger
 	if after != nil {
-		if err := after.Handle(res.Name, oldEntity, entity); err != nil {
-			logging.Error("invoke trigger after update of resource %s fail: %s", res.Name, err.Error())
-			return nil, fmt.Errorf("after update trigger fail: %s", err.Error())
+		for _, trigger := range after {
+			if err := trigger.Handle(res.Name, oldEntity, entity, request); err != nil {
+				logging.Error("invoke trigger after update of resource %s fail: %s", res.Name, err.Error())
+				return nil, fmt.Errorf("after update trigger fail: %s", err.Error())
+			}
 		}
 	}
 	return entity, nil

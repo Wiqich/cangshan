@@ -7,7 +7,7 @@ func init() {
 }
 
 type HandlerGroup struct {
-	Handlers []*MatchHandler
+	Handlers []MatchHandler
 }
 
 func (group *HandlerGroup) Handle(request *Request) (match bool) {

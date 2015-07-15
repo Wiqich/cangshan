@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/yangchenxing/cangshan/structs"
 )
 
 var (
@@ -15,6 +17,7 @@ type Application struct {
 	sync.Mutex
 	modules  map[string]interface{}
 	consts   map[string]interface{}
+	run      []string
 	waitings map[string][]namedChan
 	events   chan *assemblerEvent
 }
@@ -40,8 +43,10 @@ func NewApplication(config map[string]interface{}) (*Application, error) {
 			unfinished++
 			go app.newAssembler("const").setConst(config)
 			continue
-		}
-		if nonModules[moduleType] {
+		case "run":
+			if err := structs.Unmarshal(config, &app.run); err != nil {
+				return app, fmt.Errorf("config run fail: %s", err.Error())
+			}
 			continue
 		}
 		if moduleCreater := moduleCreaters[moduleType]; moduleCreater == nil {
@@ -79,19 +84,21 @@ func NewApplication(config map[string]interface{}) (*Application, error) {
 }
 
 func (app *Application) Run() error {
-	runables := make([]Runable, 0, 1)
-	for _, module := range app.modules {
-		if runable, ok := module.(Runable); ok {
-			runables = append(runables, runable)
+	errChan := make(chan error)
+	count := 0
+	for _, name := range app.run {
+		if module := app.modules[name]; module == nil {
+			return fmt.Errorf("Missing run module: %s", name)
+		} else if run, ok := app.modules[name].(Runable); !ok {
+			return fmt.Errorf("Module %s is not runable", name)
+		} else {
+			go func() {
+				errChan <- run.Run()
+			}()
+			count += 1
 		}
 	}
-	errChan := make(chan error, len(runables))
-	for _, runable := range runables {
-		go func() {
-			errChan <- runable.Run()
-		}()
-	}
-	for range runables {
+	for i := 0; i < count; i++ {
 		if err := <-errChan; err != nil {
 			return err
 		}
