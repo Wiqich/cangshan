@@ -2,6 +2,7 @@ package simplereport
 
 import (
 	"fmt"
+
 	"github.com/yangchenxing/cangshan/application"
 	"github.com/yangchenxing/cangshan/client/sql"
 	"github.com/yangchenxing/cangshan/webserver"
@@ -39,7 +40,7 @@ func (report *SimpleReport) Handle(request *webserver.Request) {
 			params[i] = v
 		}
 	}
-	rows, err := report.DB.Query(report.SQL, params)
+	rows, err := report.DB.Query(report.SQL, params...)
 	if err != nil {
 		request.Error("Search report fail: %s", err.Error())
 		webserver.WriteStandardJSONResult(request, false, "message", "Server internal error")

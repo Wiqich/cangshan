@@ -2,133 +2,112 @@ package logging
 
 import (
 	"fmt"
+	"net"
+	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yangchenxing/cangshan/application"
+	"github.com/yangchenxing/cangshan/strings"
+)
+
+var (
+	gopath          = getGopath()
+	funcnamePattern = regexp.MustCompile("^((.+/)*[^./]+\\.)?((?P<class>[^./]+)\\.)?(?P<func>[^./]+)$")
+	hostname, _     = os.Hostname()
+	localIP         = getLocalIPv4()
 )
 
 func init() {
 	application.RegisterModulePrototype("LogFormatter", new(Formatter))
 }
 
-type event struct {
-	level     string
-	message   string
-	file      string
-	line      string
-	timestamp time.Time
-	funcname  string
-	attr      map[string]interface{}
-}
-
-func newEvent(skip int, level string, attr map[string]interface{}, format string, params ...interface{}) *event {
-	pc, file, line, ok := runtime.Caller(skip)
-	if !ok {
-		file = "?"
-		line = 0
-	}
-	funcname := "?"
-	if callerFunc := runtime.FuncForPC(pc); callerFunc != nil {
-		funcname = callerFunc.Name()
-	}
-	return &event{
-		level:     level,
-		message:   fmt.Sprintf(format, params...),
-		file:      file,
-		line:      strconv.Itoa(int(line)),
-		timestamp: time.Now(),
-		funcname:  funcname,
-		attr:      attr,
-	}
-}
-
-type fieldFormatter interface {
-	format(*event) string
-}
-
-type basicFieldFormatter func(*event) string
-
-func (formatter basicFieldFormatter) format(e *event) string {
-	if formatter == nil {
-		return ""
-	}
-	return formatter(e)
-}
-
-type attrFieldFormatter string
-
-func (formatter attrFieldFormatter) format(e *event) string {
-	if e.attr == nil {
-		return "!MISSING!"
-	} else if i := e.attr[string(formatter)]; i == nil {
-		return "!MISSING!"
-	} else {
-		switch v := i.(type) {
-		case int, int8, int16, int32, int64:
-			return strconv.FormatInt(reflect.ValueOf(i).Int(), 10)
-		case uint, uint8, uint16, uint32, uint64:
-			return strconv.FormatUint(reflect.ValueOf(i).Uint(), 10)
-		case float32, float64:
-			return strconv.FormatFloat(reflect.ValueOf(i).Float(), 'f', 6, 64)
-		case bool:
-			return strconv.FormatBool(v)
-		case string:
-			return v
-		case time.Duration:
-			return v.String()
-		case time.Time:
-			return v.Format("2006-01-02:15:04:05-0700")
-		default:
-			return fmt.Sprintf("!UNSUPPORTED{%s}!", reflect.TypeOf(v).String())
+func getLocalIPv4() string {
+	if infs, err := net.Interfaces(); err == nil && len(infs) > 0 {
+		for _, inf := range infs {
+			if inf.Flags&net.FlagLoopback != 0 {
+				continue
+			}
+			if addrs, err := inf.Addrs(); err == nil && len(addrs) > 0 {
+				for _, addr := range addrs {
+					if ipnet, ok := addr.(*net.IPNet); ok {
+						if ipv4 := ipnet.IP.To4(); ipv4 != nil {
+							return ipv4.String()
+						}
+					}
+				}
+			}
 		}
 	}
+	return ""
 }
 
-var (
-	fieldFormatters = map[string]basicFieldFormatter{
-		"level":    func(e *event) string { return e.level },
-		"message":  func(e *event) string { return e.message },
-		"filepath": func(e *event) string { return e.file },
-		"filename": func(e *event) string { return filepath.Base(e.file) },
-		"line":     func(e *event) string { return e.line },
-		"time":     func(e *event) string { return e.timestamp.Format("2006-01-02:15:04:05-0700") },
-		"func":     func(e *event) string { return e.funcname },
-		"funcname": func(e *event) string { return e.funcname[strings.LastIndex(e.funcname, ".")+1:] },
+type event map[string]interface{}
+
+type logTimestamp time.Time
+
+func (ts logTimestamp) String() string {
+	return (time.Time(ts)).Format("2006-01-02:15:04:05-0700")
+}
+
+func (ts logTimestamp) Format(s fmt.State, c rune) {
+	s.Write([]byte((time.Time(ts)).Format("2006-01-02:15:04:05-0700")))
+}
+
+func newEvent(skip int, level string, attr map[string]interface{}, format string, params ...interface{}) event {
+	pc, file, line, ok := runtime.Caller(skip)
+	if !ok {
+		file = "unknown"
+		line = 0
 	}
-	fieldRegexp, _ = regexp.Compile("%[0-9a-zA-Z.]+")
-)
+	funcname := "unknown"
+	if callerFunc := runtime.FuncForPC(pc); callerFunc != nil {
+		funcname = callerFunc.Name()
+		if match := stringutil.MatchRegexpMap(funcnamePattern, funcname); match != nil {
+			if classname, found := match["class"]; found {
+				funcname = classname + "." + match["func"]
+			} else {
+				funcname = match["func"]
+			}
+		}
+	}
+	if strings.HasPrefix(file, gopath) {
+		file = file[len(gopath)+1:]
+	}
+	timestamp := time.Now()
+	ev := map[string]interface{}{
+		"loglv":    level,
+		"logmsg":   fmt.Sprintf(format, params...),
+		"logfile":  file,
+		"logline":  line,
+		"logtime":  timestamp.Format("2006-01-02:15:04:05-0700"),
+		"logfunc":  funcname,
+		"hostname": hostname,
+		"localip":  localIP,
+	}
+	for key, value := range attr {
+		ev[key] = value
+	}
+	return ev
+}
 
 // A Formatter converts log event to human readable string
 type Formatter struct {
-	Format  string
-	pattern string
-	fields  []fieldFormatter
+	*stringutil.MapFormatter
+	Pattern string
 }
 
 // Initialize the Formatter module for applications
 func (formatter *Formatter) Initialize() error {
-	fields := fieldRegexp.FindAllString(formatter.Format, -1)
-	formatter.fields = make([]fieldFormatter, len(fields))
-	for i, field := range fields {
-		var found bool
-		if formatter.fields[i], found = fieldFormatters[field[1:]]; !found {
-			formatter.fields[i] = attrFieldFormatter(field[1:])
-		}
-	}
-	formatter.pattern = fieldRegexp.ReplaceAllString(formatter.Format, "%s") + "\n"
+	formatter.MapFormatter = stringutil.NewMapFormatter(formatter.Pattern + "\n")
 	return nil
 }
 
-func (formatter *Formatter) format(e *event) string {
-	fields := make([]interface{}, len(formatter.fields))
-	for i, fieldFormatter := range formatter.fields {
-		fields[i] = fieldFormatter.format(e)
-	}
-	return fmt.Sprintf(formatter.pattern, fields...)
+func getGopath() string {
+	_, file, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(file)
+	return file[:len(dir)-len("/github.com/yangchenxing/cangshan/logging")]
 }

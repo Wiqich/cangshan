@@ -1,6 +1,7 @@
 package application
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -34,6 +35,7 @@ type assemblerEvent struct {
 type assembler struct {
 	*Application
 	name string
+	data interface{}
 }
 
 func (asm *assembler) newEvent(typ assembleEventType, err error) *assemblerEvent {
@@ -54,8 +56,6 @@ func (asm *assembler) unmarshal(data interface{}, rv reflect.Value) (interface{}
 			}
 			rv.Set(module)
 			return data, true, nil
-		} else if strings.HasPrefix(ref, "!CONST:") {
-			return asm.getConst(ref[7:]), false, nil
 		}
 	}
 	return data, false, nil
@@ -110,20 +110,56 @@ func (asm *assembler) getModule(name string) interface{} {
 	return m
 }
 
-func (asm *assembler) getConst(name string) interface{} {
-	asm.Lock()
-	if asm.consts == nil {
-		waitings, found := asm.waitings["const"]
-		if !found {
-			waitings = make([]namedChan, 0, 1)
+func (asm *assembler) alias(config interface{}) {
+	var alias []struct {
+		Name  string
+		Alias string
+	}
+	if err := structs.Unmarshal(config, &alias); err != nil {
+		asm.events <- asm.newEvent(doneEvent, fmt.Errorf("Unmarshal fail: %s", err.Error()))
+		return
+	}
+	for _, alias := range alias {
+		if alias.Name == "" || alias.Alias == "" {
+			asm.events <- asm.newEvent(doneEvent, errors.New("Missing \"Name\" or \"Alias\""))
+			return
 		}
-		ch := newNamedChan(asm.name)
-		asm.waitings[name] = append(waitings, ch)
-		asm.events <- asm.newEvent(waitEvent, nil)
-		asm.Unlock()
-		<-ch.ch
-	} else {
+		module := asm.getModule(alias.Name)
+		asm.Lock()
+		asm.modules[alias.Alias] = module
+		for _, waiting := range asm.waitings[alias.Alias] {
+			asm.events <- asm.newEvent(receiveEvent, nil)
+			waiting.ch <- module
+		}
+		delete(asm.waitings, alias.Alias)
 		asm.Unlock()
 	}
-	return asm.consts[name]
+	asm.events <- asm.newEvent(doneEvent, nil)
+}
+
+func (asm *assembler) setConst(config interface{}) {
+	var consts []struct {
+		Name  string
+		Value interface{}
+	}
+	if err := structs.Unmarshal(config, &consts); err != nil {
+		asm.events <- asm.newEvent(doneEvent, fmt.Errorf("Unmarshal fail: %s", err.Error()))
+		return
+	}
+	asm.Lock()
+	defer asm.Unlock()
+	for _, c := range consts {
+		if c.Name == "" || c.Value == nil {
+			asm.events <- asm.newEvent(doneEvent, errors.New("Missing \"Name\" or \"Value\""))
+			return
+		}
+		asm.modules[c.Name] = c.Value
+		for _, waiting := range asm.waitings[c.Name] {
+			asm.events <- asm.newEvent(receiveEvent, nil)
+			waiting.ch <- c.Value
+		}
+		delete(asm.waitings, c.Name)
+	}
+	asm.events <- asm.newEvent(doneEvent, nil)
+
 }

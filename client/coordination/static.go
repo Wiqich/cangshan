@@ -33,6 +33,10 @@ func (sc *StaticCoordination) Register(dir, name, value string, ttl time.Duratio
 	return errors.New("Not supported")
 }
 
+func (sc *StaticCoordination) Remove(dir, name string) error {
+	return errors.New("Not supported")
+}
+
 func (sc *StaticCoordination) Wait(dir string) (*CoordinationEvent, error) {
 	for {
 		time.Sleep(time.Hour)

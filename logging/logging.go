@@ -2,7 +2,6 @@ package logging
 
 import (
 	"container/list"
-	"fmt"
 	"sync"
 
 	"github.com/yangchenxing/cangshan/application"
@@ -80,19 +79,18 @@ func Fatal(format string, params ...interface{}) {
 // Flush flush cached log to global Logging instance and clean cache
 func Flush() {
 	if globalLogging == nil {
-		globalLogging = createDefaultLogging()
+		globalLogging = CreateDefaultLogging()
 	}
 	flushMutex.Lock()
 	defer flushMutex.Unlock()
 	for level, cache := range caches {
 		for e := cache.Front(); e != nil; e = e.Next() {
-			fmt.Println(e)
 			for _, handler := range globalLogging.handlers[level] {
-				handler.write(e.Value.(*event), nil)
+				handler.write(e.Value.(event), nil)
 			}
 		}
+		cache.Init()
 	}
-	caches = make(map[string]*list.List)
 }
 
 // LogSkip write log with specified level and specified caller by skip argument
@@ -120,7 +118,7 @@ func LogEx(skip int, level string, formatter *Formatter, attr map[string]interfa
 	}
 }
 
-func createDefaultLogging() *Logging {
+func CreateDefaultLogging() *Logging {
 	log := &Logging{
 		Handlers: []*Handler{createDefaultHandler()},
 	}

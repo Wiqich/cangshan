@@ -94,7 +94,7 @@ func (u unmarshaler) unmarshalStruct(data interface{}, rv reflect.Value) error {
 	// fmt.Println("unmarshalStruct:", data, rv)
 	mapping, ok := data.(map[string]interface{})
 	if !ok {
-		return mismatch(rv, "map", mapping)
+		return mismatch(rv, "map", data)
 	}
 
 	fields := cachedTypeFields(rv.Type())
@@ -193,9 +193,6 @@ func (u unmarshaler) unmarshalSlice(data interface{}, rv reflect.Value) error {
 		return badtype("slice", data)
 	}
 	if rv.IsNil() {
-		if !rv.CanSet() {
-			fmt.Println(data, rv)
-		}
 		rv.Set(reflect.MakeSlice(rv.Type(), lv.Len(), lv.Len()))
 	}
 	return u.unmarshalSliceArray(lv, rv)
@@ -260,7 +257,7 @@ func (u unmarshaler) unmarshalFloat(data interface{}, rv reflect.Value) error {
 		rv.SetFloat(float64(lv.Int()))
 	case lk >= reflect.Uint && lk <= reflect.Uint64:
 		rv.SetFloat(float64(lv.Uint()))
-	case lk == reflect.Float32 && lk == reflect.Float64:
+	case lk == reflect.Float32 || lk == reflect.Float64:
 		rv.SetFloat(lv.Float())
 	default:
 		return badtype("float", data)

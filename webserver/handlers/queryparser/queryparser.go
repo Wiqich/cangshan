@@ -2,14 +2,16 @@ package queryparser
 
 import (
 	"encoding/json"
-	"github.com/yangchenxing/cangshan/application"
-	"github.com/yangchenxing/cangshan/webserver"
 	"io/ioutil"
 	"strings"
+
+	"github.com/yangchenxing/cangshan/application"
+	"github.com/yangchenxing/cangshan/webserver"
 )
 
 func init() {
 	application.RegisterModulePrototype("WebServerQueryParser", new(QueryParserHandler))
+	application.RegisterBuiltinModule("WebServerQueryParser", &QueryParserHandler{10240})
 }
 
 type QueryParserHandler struct {

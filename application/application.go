@@ -16,7 +16,6 @@ var (
 type Application struct {
 	sync.Mutex
 	modules  map[string]interface{}
-	consts   map[string]interface{}
 	run      []string
 	waitings map[string][]namedChan
 	events   chan *assemblerEvent
@@ -32,15 +31,16 @@ func NewApplication(config map[string]interface{}) (*Application, error) {
 		waitings: make(map[string][]namedChan),
 		events:   make(chan *assemblerEvent, 1),
 	}
-	unfinished := 0
+	var nop struct{}
+	unfinished := make(map[string]struct{})
 	for moduleType, config := range config {
 		switch moduleType {
 		case "alias":
-			unfinished++
+			unfinished["alias"] = nop
 			go app.newAssembler("alias").alias(config)
 			continue
 		case "const":
-			unfinished++
+			unfinished["const"] = nop
 			go app.newAssembler("const").setConst(config)
 			continue
 		case "run":
@@ -56,14 +56,14 @@ func NewApplication(config map[string]interface{}) (*Application, error) {
 		} else {
 			for name, config := range config {
 				name = moduleType + "." + name
-				unfinished++
+				unfinished[name] = nop
 				go app.newAssembler(name).loadModule(config, moduleCreater.Create())
 			}
 		}
 	}
 	locked := 0
-	for unfinished > 0 {
-		if locked == unfinished {
+	for len(unfinished) > 0 {
+		if locked == len(unfinished) {
 			return app, ErrDeadlock
 		}
 		ev := <-app.events
@@ -73,7 +73,7 @@ func NewApplication(config map[string]interface{}) (*Application, error) {
 		case receiveEvent:
 			locked--
 		case doneEvent:
-			unfinished--
+			delete(unfinished, ev.name)
 		}
 		if ev.err != nil {
 			return app, fmt.Errorf("create application fail during load module %s: %s",
@@ -114,16 +114,20 @@ func (app *Application) newAssembler(name string) *assembler {
 }
 
 func (app *Application) DumpWatingSequences() [][]string {
+	Debug("Waiting modules: %s", app.waitings)
 	result := make([][]string, 0, 1)
 	depends := make(map[string]string)
+	nonroots := make(map[string]bool)
 	for depName, waitings := range app.waitings {
 		for _, waiting := range waitings {
+			nonroots[depName] = true
 			depends[waiting.name] = depName
 		}
 	}
+
 	searched := make(map[string]bool)
 	for name, _ := range depends {
-		if searched[name] {
+		if nonroots[name] || searched[name] {
 			continue
 		}
 		seq := []string{name}

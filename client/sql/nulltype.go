@@ -7,10 +7,21 @@ import (
 	"time"
 )
 
-type NullInt64 gosql.NullInt64
-type NullFloat64 gosql.NullFloat64
-type NullString gosql.NullString
-type NullBool gosql.NullBool
+type NullInt64 struct {
+	gosql.NullInt64
+}
+
+type NullFloat64 struct {
+	gosql.NullFloat64
+}
+
+type NullString struct {
+	gosql.NullString
+}
+
+type NullBool struct {
+	gosql.NullBool
+}
 
 var (
 	zeroTime   time.Time

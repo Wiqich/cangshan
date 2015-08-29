@@ -30,16 +30,16 @@ func (handler *Handler) Initialize() error {
 	return nil
 }
 
-func (handler *Handler) write(e *event, formatter *Formatter) {
+func (handler *Handler) write(e event, formatter *Formatter) {
 	if formatter == nil {
 		formatter = handler.Formatter
 	}
-	handler.Writer.Write([]byte(formatter.format(e)))
+	handler.Writer.Write([]byte(formatter.Format(e)))
 }
 
 func createDefaultHandler() *Handler {
 	formatter := &Formatter{
-		Format: "%level [%time][%filename:%line][%funcname] %message",
+		Pattern: "%(loglv:s) [%(logtime:s)][%(logfile:s):%(logline:d)][%(logfunc:s)] %(logmsg:s)",
 	}
 	formatter.Initialize()
 	return &Handler{

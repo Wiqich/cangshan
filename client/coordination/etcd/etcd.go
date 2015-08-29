@@ -43,8 +43,14 @@ func (ec *EtcdCoordination) Discover(dir string) ([]coordination.Node, error) {
 }
 
 func (ec *EtcdCoordination) Register(dir, name, value string, ttl time.Duration) error {
-	_, err := ec.client.Set(dir+"/"+name, value, uint64(ttl.Seconds()))
-	if err != nil {
+	if _, err := ec.client.Set(dir+"/"+name, value, uint64(ttl.Seconds())); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (ec *EtcdCoordination) Remove(dir, name string) error {
+	if _, err := ec.client.Delete(dir+"/"+name, false); err != nil {
 		return err
 	}
 	return nil

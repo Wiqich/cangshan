@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"net/smtp"
 	"strings"
+
+	"github.com/yangchenxing/cangshan/application"
 )
 
-type EMail interface {
-	SendText(subject, content string, receivers ...string) error
+func init() {
+	application.RegisterModulePrototype("EMail", new(EMail))
 }
 
-type EMailClient struct {
+type EMail struct {
 	Server    string
 	Username  string
 	Password  string
@@ -20,13 +22,13 @@ type EMailClient struct {
 	auth      smtp.Auth
 }
 
-func (client *EMailClient) Initialize() error {
+func (client *EMail) Initialize() error {
 	client.auth = smtp.PlainAuth(client.Username, client.Username, client.Password,
 		strings.Split(client.Server, ":")[0])
 	return nil
 }
 
-func (client EMailClient) SendText(subject, content string, receivers ...string) error {
+func (client EMail) SendText(subject, content string, receivers ...string) error {
 	var buffer bytes.Buffer
 	receivers = append(receivers, client.Receivers...)
 	fmt.Fprintf(&buffer, "From: %s\r\n", client.Sender)
