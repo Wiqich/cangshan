@@ -21,6 +21,10 @@ import (
 	"github.com/yangchenxing/cangshan/logging"
 )
 
+const (
+	defaultUpdateInterval = time.Hour
+)
+
 func init() {
 	application.RegisterModulePrototype("IPIPNet", new(IPIPNet))
 }
@@ -91,8 +95,14 @@ func (client *IPIPNet) Initialize() error {
 	client.version = new(IPIPNetDataVersion)
 	client.version.load(filepath.Join(client.Path, ".version"))
 	logging.Debug("ipip.net data version: %v", client.version)
-	if err := client.update(); err != nil {
-		return err
+	// if err := client.update(); err != nil {
+	// 	return err
+	// }
+	if err := client.load(); err != nil {
+		logging.Error("load ipip.net data fail: %s", err)
+	}
+	if client.UpdateInterval == 0 {
+		client.UpdateInterval = defaultUpdateInterval
 	}
 	if client.UpdateInterval > 0 {
 		go func() {
@@ -134,7 +144,7 @@ func (client *IPIPNet) checkUpdate() (*IPIPNetDataVersion, error) {
 	if resp, err := http.Get(client.VersionURL); err != nil {
 		return nil, fmt.Errorf("check version fail: %s", err.Error())
 	} else if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("check version fail: status=%d", resp.Status)
+		return nil, fmt.Errorf("check version fail: status=%s", resp.Status)
 	} else if version, err := ioutil.ReadAll(resp.Body); err != nil {
 		return nil, fmt.Errorf("check version fail: %s", err.Error())
 	} else if client.version.Version != string(version) {
@@ -184,8 +194,8 @@ func (client *IPIPNet) download() (string, error) {
 
 func (client *IPIPNet) update() error {
 	logging.Debug("update ipip.net data")
-	needToLoad := client.sections == nil
 	if updateVersion, err := client.checkUpdate(); err != nil {
+		// logging.Error("check ipip.net update fail: %s", err)
 		return fmt.Errorf("check update fail: %s", err.Error())
 	} else if updateVersion != nil {
 		if filename, err := client.download(); err == nil {
@@ -193,17 +203,17 @@ func (client *IPIPNet) update() error {
 			client.version = updateVersion
 			client.version.save(filepath.Join(client.Path, ".version"))
 			logging.Debug("download ipip.net data success")
-			needToLoad = true
+			if err := client.load(); err != nil {
+				// logging.Error("load ipip.net data fail: %s", err)
+				return fmt.Errorf("load ipip.net data fail: %s", err)
+			}
+			logging.Debug("load new ipip.net data success")
 		} else {
-			return fmt.Errorf("download ipip.net data file fail: %s", err.Error())
+			// logging.Error("download ipip.net data fail: %s", err)
+			return fmt.Errorf("download ipip.net data fail: %s", err)
 		}
 	} else {
 		logging.Debug("ipip.net data is up-to-date")
-	}
-	if needToLoad {
-		if err := client.load(); err != nil {
-			return fmt.Errorf("load ipip.net data fail: %s", err.Error())
-		}
 	}
 	return nil
 }

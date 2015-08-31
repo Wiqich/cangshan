@@ -36,7 +36,7 @@ func (trigger *StarvationTrigger) Initialize() error {
 						trigger.Callback()
 					} else {
 						hour, min, sec := time.Now().Clock()
-						now := time.Duration(hour)*time.Hour + time.Duration(min)*time.Minute + time.Duration(sec) + time.Second
+						now := time.Duration(hour)*time.Hour + time.Duration(min)*time.Minute + time.Duration(sec)*time.Second
 						if now < trigger.EbbStart || now > trigger.EbbEnd {
 							trigger.Callback()
 						}

@@ -14,17 +14,32 @@ import (
 )
 
 var (
-	path = flag.String("path", "data/ipip.net", "IP库数据路径")
+	path           = flag.String("path", "data/ipip.net", "data path")
+	versionURL     = flag.String("version", "", "ipip.net version url")
+	downloadURL    = flag.String("download", "", "ipip.net download url")
+	updateInterval = flag.Duration("update", time.Minute, "ipip.net update interval")
 )
+
+func exit(code int) {
+	logging.Flush()
+	os.Exit(code)
+}
 
 func main() {
 	logging.CreateDefaultLogging()
 	flag.Parse()
+	if *versionURL == "" {
+		logging.Error("\"version\" is required argument")
+		exit(1)
+	} else if *downloadURL == "" {
+		logging.Error("\"download\" is required argument")
+		exit(1)
+	}
 	locater := &ipipnet.IPIPNet{
-		VersionURL:     "http://user.ipip.net/download.php?a=version&token=f41859e64780afe1772df0e73b0f7ce4de8a514c",
-		DownloadURL:    "http://user.ipip.net/download.php?token=f41859e64780afe1772df0e73b0f7ce4de8a514c",
+		VersionURL:     *versionURL,
+		DownloadURL:    *downloadURL,
 		Path:           *path,
-		UpdateInterval: time.Hour,
+		UpdateInterval: *updateInterval,
 	}
 	if err := locater.Initialize(); err != nil {
 		fmt.Println("初始化ipip.net定位器出错:", err.Error())
