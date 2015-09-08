@@ -18,7 +18,6 @@ import (
 
 	"github.com/yangchenxing/cangshan/application"
 	"github.com/yangchenxing/cangshan/iplocater"
-	"github.com/yangchenxing/cangshan/logging"
 )
 
 const (
@@ -99,7 +98,7 @@ func (client *IPIPNet) Initialize() error {
 	// 	return err
 	// }
 	if err := client.load(); err != nil {
-		logging.Error("load ipip.net data fail: %s", err)
+		iplocater.Error("load ipip.net data fail: %s", err)
 	}
 	if client.UpdateInterval == 0 {
 		client.UpdateInterval = defaultUpdateInterval
@@ -110,7 +109,7 @@ func (client *IPIPNet) Initialize() error {
 			for {
 				time.Sleep(client.UpdateInterval)
 				if err := client.update(); err != nil {
-					logging.Error("update ipip.net data fail: %s", err.Error())
+					iplocater.Error("update ipip.net data fail: %s", err.Error())
 				}
 			}
 		}()
@@ -195,7 +194,7 @@ func (client *IPIPNet) download() (string, error) {
 func (client *IPIPNet) update() error {
 	iplocater.Debug("update ipip.net data")
 	if updateVersion, err := client.checkUpdate(); err != nil {
-		// logging.Error("check ipip.net update fail: %s", err)
+		// iplocater.Error("check ipip.net update fail: %s", err)
 		return fmt.Errorf("check update fail: %s", err.Error())
 	} else if updateVersion != nil {
 		if filename, err := client.download(); err == nil {
@@ -204,12 +203,12 @@ func (client *IPIPNet) update() error {
 			client.version.save(filepath.Join(client.Path, ".version"))
 			iplocater.Debug("download ipip.net data success")
 			if err := client.load(); err != nil {
-				// logging.Error("load ipip.net data fail: %s", err)
+				// iplocater.Error("load ipip.net data fail: %s", err)
 				return fmt.Errorf("load ipip.net data fail: %s", err)
 			}
 			iplocater.Debug("load new ipip.net data success")
 		} else {
-			// logging.Error("download ipip.net data fail: %s", err)
+			// iplocater.Error("download ipip.net data fail: %s", err)
 			return fmt.Errorf("download ipip.net data fail: %s", err)
 		}
 	} else {
