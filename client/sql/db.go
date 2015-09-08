@@ -3,6 +3,7 @@ package sql
 import (
 	gosql "database/sql"
 	"fmt"
+	"reflect"
 	"regexp"
 
 	"github.com/yangchenxing/cangshan/application"
@@ -92,4 +93,39 @@ func (db *DB) QueryRow(query string, args ...interface{}) *Row {
 		logging.Debug("SQL: query=\"%s\", params=%v", normalizeSQLQuery(query), args)
 	}
 	return &Row{db.DB.QueryRow(query, args...)}
+}
+
+func (db *DB) QueryAll(query string, args []interface{}, callback func(...interface{}) error, dests []interface{}) error {
+	if rows, err := db.Query(query, args...); err != nil {
+		return err
+	} else {
+		return rows.ScanAll(callback, dests...)
+	}
+}
+
+func (rows Rows) ScanAll(callback func(...interface{}) error, dests ...interface{}) error {
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logging.Error("close Rows fail: %s", err.Error())
+		}
+	}()
+	callbackParams := make([]reflect.Value, len(dests))
+	for rows.Next() {
+		if err := rows.Scan(dests...); err != nil {
+			callbackValue := reflect.ValueOf(callback)
+			for i, dest := range dests {
+				destValue := reflect.ValueOf(dest)
+				if destValue.Kind() == reflect.Ptr {
+					callbackParams[i] = destValue.Elem()
+				} else {
+					callbackParams[i] = destValue
+				}
+			}
+			errorValue := callbackValue.Call(callbackParams)[0]
+			if !errorValue.IsNil() {
+				return errorValue.Interface().(error)
+			}
+		}
+	}
+	return nil
 }

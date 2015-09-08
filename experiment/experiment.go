@@ -3,6 +3,7 @@ package experiment
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/yangchenxing/cangshan/logging"
 )
 
@@ -14,17 +15,15 @@ func LoadJson(data []byte) (*Branch, error) {
 	return root, root.Initialize()
 }
 
-type FeatureMark struct {
-	Name      string
-	Value     interface{}
-	Operation string
-}
-
 type Branch struct {
-	Name     string
-	Router   map[string]interface{}
-	Marks    []FeatureMark
-	Children []Branch
+	Name   string
+	Router map[string]interface{}
+	Marks  []struct {
+		Name      string
+		Value     interface{}
+		Operation string
+	}
+	Children []*Branch
 	router   Router
 }
 

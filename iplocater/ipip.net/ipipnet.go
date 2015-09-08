@@ -78,7 +78,7 @@ type IPIPNet struct {
 }
 
 func (client *IPIPNet) Initialize() error {
-	logging.Debug("initialize ipip.net client")
+	iplocater.Debug("initialize ipip.net client")
 	if _, err := os.Stat(client.Path); err != nil {
 		if err := os.MkdirAll(client.Path, 0755); err != nil {
 			return fmt.Errorf("ensure data directory fail: %s", err.Error())
@@ -88,13 +88,13 @@ func (client *IPIPNet) Initialize() error {
 	if client.idDict, err = iplocater.LoadIDDict(filepath.Join(client.Path, "iddict.csv")); err != nil {
 		return fmt.Errorf("load iplocater id dictionary fail: %s", err.Error())
 	} else {
-		logging.Debug("load iplocater id dictionary success")
+		iplocater.Debug("load iplocater id dictionary success")
 		text, _ := json.MarshalIndent(client.idDict, "", "    ")
 		ioutil.WriteFile(filepath.Join(client.Path, "iddict.dump.json"), text, 0755)
 	}
 	client.version = new(IPIPNetDataVersion)
 	client.version.load(filepath.Join(client.Path, ".version"))
-	logging.Debug("ipip.net data version: %v", client.version)
+	iplocater.Debug("ipip.net data version: %v", client.version)
 	// if err := client.update(); err != nil {
 	// 	return err
 	// }
@@ -106,7 +106,7 @@ func (client *IPIPNet) Initialize() error {
 	}
 	if client.UpdateInterval > 0 {
 		go func() {
-			logging.Debug("ipip.net update interval: %s", client.UpdateInterval)
+			iplocater.Debug("ipip.net update interval: %s", client.UpdateInterval)
 			for {
 				time.Sleep(client.UpdateInterval)
 				if err := client.update(); err != nil {
@@ -115,8 +115,8 @@ func (client *IPIPNet) Initialize() error {
 			}
 		}()
 	}
-	logging.Debug("initialize ipip.net client success")
-	// logging.Debug("section size: %d, index size: %d", len(client.sections.sections), len(client.sections.index))
+	iplocater.Debug("initialize ipip.net client success")
+	// iplocater.Debug("section size: %d, index size: %d", len(client.sections.sections), len(client.sections.index))
 	return nil
 }
 
@@ -148,7 +148,7 @@ func (client *IPIPNet) checkUpdate() (*IPIPNetDataVersion, error) {
 	} else if version, err := ioutil.ReadAll(resp.Body); err != nil {
 		return nil, fmt.Errorf("check version fail: %s", err.Error())
 	} else if client.version.Version != string(version) {
-		logging.Debug("found ipip.net data new version: %s", string(version))
+		iplocater.Debug("found ipip.net data new version: %s", string(version))
 		return &IPIPNetDataVersion{
 			Version: string(version),
 		}, nil
@@ -188,12 +188,12 @@ func (client *IPIPNet) download() (string, error) {
 			return "", fmt.Errorf("write data file fail: %s", err.Error())
 		}
 	}
-	logging.Debug("download ipip.net data success")
+	iplocater.Debug("download ipip.net data success")
 	return filename, nil
 }
 
 func (client *IPIPNet) update() error {
-	logging.Debug("update ipip.net data")
+	iplocater.Debug("update ipip.net data")
 	if updateVersion, err := client.checkUpdate(); err != nil {
 		// logging.Error("check ipip.net update fail: %s", err)
 		return fmt.Errorf("check update fail: %s", err.Error())
@@ -202,24 +202,24 @@ func (client *IPIPNet) update() error {
 			updateVersion.Filename = filename
 			client.version = updateVersion
 			client.version.save(filepath.Join(client.Path, ".version"))
-			logging.Debug("download ipip.net data success")
+			iplocater.Debug("download ipip.net data success")
 			if err := client.load(); err != nil {
 				// logging.Error("load ipip.net data fail: %s", err)
 				return fmt.Errorf("load ipip.net data fail: %s", err)
 			}
-			logging.Debug("load new ipip.net data success")
+			iplocater.Debug("load new ipip.net data success")
 		} else {
 			// logging.Error("download ipip.net data fail: %s", err)
 			return fmt.Errorf("download ipip.net data fail: %s", err)
 		}
 	} else {
-		logging.Debug("ipip.net data is up-to-date")
+		iplocater.Debug("ipip.net data is up-to-date")
 	}
 	return nil
 }
 
 func (client *IPIPNet) load() error {
-	logging.Debug("load ipip.net data")
+	iplocater.Debug("load ipip.net data")
 	if data, err := ioutil.ReadFile(filepath.Join(client.Path, client.version.Filename)); err != nil {
 		return fmt.Errorf("read data fail: %s", err.Error())
 	} else {
@@ -248,7 +248,7 @@ func (client *IPIPNet) load() error {
 		}
 		client.sections = idxSections
 	}
-	logging.Debug("load ipip.net data success")
+	iplocater.Debug("load ipip.net data success")
 	return nil
 }
 

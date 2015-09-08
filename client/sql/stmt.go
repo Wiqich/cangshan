@@ -37,3 +37,11 @@ func (s *Stmt) QueryRow(args ...interface{}) *Row {
 	}
 	return &Row{s.Stmt.QueryRow(args...)}
 }
+
+func (s *Stmt) QueryAll(query string, args []interface{}, callback func(...interface{}) error, dests []interface{}) error {
+	if rows, err := s.Query(args...); err != nil {
+		return err
+	} else {
+		return rows.ScanAll(callback, dests...)
+	}
+}

@@ -66,3 +66,11 @@ func (tx *Tx) Rollback() error {
 	}
 	return tx.Tx.Rollback()
 }
+
+func (tx *Tx) QueryAll(query string, args []interface{}, callback func(...interface{}) error, dests []interface{}) error {
+	if rows, err := tx.Query(query, args...); err != nil {
+		return err
+	} else {
+		return rows.ScanAll(callback, dests...)
+	}
+}

@@ -3,8 +3,9 @@ package experiment
 import (
 	"errors"
 	"fmt"
-	"github.com/yangchenxing/cangshan/structs"
 	"reflect"
+
+	"github.com/yangchenxing/cangshan/structs"
 )
 
 var (
@@ -29,7 +30,7 @@ func createRouter(data map[string]interface{}) (Router, error) {
 		return nil, fmt.Errorf("Unknown router type: %s", typeName)
 	} else {
 		routerValue := reflect.New(typ)
-		if err := structs.UnmarshalMapValue(data, reflect.Indirect(routerValue)); err != nil {
+		if err := structs.Unmarshal(data, reflect.Indirect(routerValue)); err != nil {
 			return nil, err
 		}
 		router := routerValue.Interface().(Router)

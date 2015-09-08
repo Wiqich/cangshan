@@ -9,6 +9,10 @@ import (
 	"github.com/yangchenxing/cangshan/structs"
 )
 
+var (
+	initializedModules = make(map[uintptr]bool)
+)
+
 type namedChan struct {
 	name string
 	ch   chan interface{}
@@ -161,5 +165,8 @@ func (asm *assembler) setConst(config interface{}) {
 		delete(asm.waitings, c.Name)
 	}
 	asm.events <- asm.newEvent(doneEvent, nil)
+}
 
+func initializeModule(module interface{}) error {
+	return nil
 }
