@@ -6,8 +6,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-
-	"github.com/yangchenxing/cangshan/logging"
 )
 
 type regionRecord struct {
@@ -117,7 +115,7 @@ func (dict *IDDict) GetLocation(regionNames []string, ispNames []string) *Locati
 			if key := strings.Join(regionNames[:i+1], "/"); !dict.unknowns[key] {
 				dict.unknowns[key] = true
 				if i > 0 {
-					logging.Debug("unknown level %d region: %s", i, key)
+					Debug("unknown level %d region: %s", i, key)
 				}
 			}
 			break
@@ -142,7 +140,7 @@ func (dict *IDDict) GetLocation(regionNames []string, ispNames []string) *Locati
 			location.ISPs = append(location.ISPs, isp)
 		} else if !dict.unknowns[name] {
 			dict.unknowns[name] = true
-			// logging.Debug("unknown isp: %s", name)
+			// Debug("unknown isp: %s", name)
 		}
 	}
 	return location

@@ -107,10 +107,10 @@ func (client *IPIPNet) Initialize() error {
 		go func() {
 			iplocater.Debug("ipip.net update interval: %s", client.UpdateInterval)
 			for {
-				time.Sleep(client.UpdateInterval)
 				if err := client.update(); err != nil {
 					iplocater.Error("update ipip.net data fail: %s", err.Error())
 				}
+				time.Sleep(client.UpdateInterval)
 			}
 		}()
 	}
