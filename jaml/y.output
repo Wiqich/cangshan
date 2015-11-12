@@ -1,0 +1,514 @@
+
+state 0
+	$accept: .root $end 
+
+	IDENTIFIER  shift 8
+	IMPORT  shift 5
+	.  error
+
+	root  goto 1
+	list  goto 2
+	field_path_head  goto 7
+	field_name  goto 6
+	field_path  goto 4
+	field  goto 3
+
+state 1
+	$accept:  root.$end 
+
+	$end  accept
+	.  error
+
+
+state 2
+	root:  list.    (1)
+	list:  list.NEWLINE field 
+	list:  list.NEWLINE 
+
+	NEWLINE  shift 9
+	.  reduce 1 (src line 46)
+
+
+state 3
+	list:  field.    (2)
+
+	.  reduce 2 (src line 54)
+
+
+state 4
+	field:  field_path.assign 
+
+	':'  shift 11
+	.  error
+
+	assign  goto 10
+
+state 5
+	field:  IMPORT.STRING 
+
+	STRING  shift 12
+	.  error
+
+
+state 6
+	field_path:  field_name.    (7)
+
+	.  reduce 7 (src line 100)
+
+
+state 7
+	field_path:  field_path_head.'.' field_name 
+	field_path_head:  field_path_head.'.' IDENTIFIER 
+
+	'.'  shift 13
+	.  error
+
+
+state 8
+	field_path_head:  IDENTIFIER.    (9)
+	field_name:  IDENTIFIER.    (11)
+	field_name:  IDENTIFIER.'[' primary_value ']' 
+	field_name:  IDENTIFIER.'[' ']' 
+
+	'['  shift 14
+	':'  reduce 11 (src line 125)
+	.  reduce 9 (src line 113)
+
+
+state 9
+	list:  list NEWLINE.field 
+	list:  list NEWLINE.    (4)
+
+	IDENTIFIER  shift 8
+	IMPORT  shift 5
+	.  reduce 4 (src line 78)
+
+	field_path_head  goto 7
+	field_name  goto 6
+	field_path  goto 4
+	field  goto 15
+
+state 10
+	field:  field_path assign.    (5)
+
+	.  reduce 5 (src line 85)
+
+
+state 11
+	assign:  ':'.non_object 
+	assign:  ':'.class tags object 
+	assign:  ':'.'@' IDENTIFIER 
+	class: .    (17)
+
+	DEC  shift 23
+	OCT  shift 24
+	HEX  shift 25
+	FLOAT  shift 26
+	STRING  shift 27
+	RUNE  shift 29
+	BOOL  shift 28
+	SQUARE_OPEN  shift 30
+	TIME  shift 21
+	DURATION  shift 22
+	'@'  shift 18
+	.  reduce 17 (src line 170)
+
+	class  goto 17
+	non_object  goto 16
+	array_literal  goto 20
+	primary_value  goto 19
+
+state 12
+	field:  IMPORT STRING.    (6)
+
+	.  reduce 6 (src line 92)
+
+
+state 13
+	field_path:  field_path_head '.'.field_name 
+	field_path_head:  field_path_head '.'.IDENTIFIER 
+
+	IDENTIFIER  shift 32
+	.  error
+
+	field_name  goto 31
+
+state 14
+	field_name:  IDENTIFIER '['.primary_value ']' 
+	field_name:  IDENTIFIER '['.']' 
+
+	DEC  shift 23
+	OCT  shift 24
+	HEX  shift 25
+	FLOAT  shift 26
+	STRING  shift 27
+	RUNE  shift 29
+	BOOL  shift 28
+	']'  shift 34
+	.  error
+
+	primary_value  goto 33
+
+state 15
+	list:  list NEWLINE field.    (3)
+
+	.  reduce 3 (src line 68)
+
+
+state 16
+	assign:  ':' non_object.    (14)
+
+	.  reduce 14 (src line 147)
+
+
+state 17
+	assign:  ':' class.tags object 
+	tags: .    (19)
+
+	'`'  shift 36
+	.  reduce 19 (src line 180)
+
+	tags  goto 35
+
+state 18
+	assign:  ':' '@'.IDENTIFIER 
+	class:  '@'.STRING 
+
+	STRING  shift 38
+	IDENTIFIER  shift 37
+	.  error
+
+
+state 19
+	non_object:  primary_value.    (30)
+
+	.  reduce 30 (src line 272)
+
+
+state 20
+	non_object:  array_literal.    (31)
+
+	.  reduce 31 (src line 277)
+
+
+state 21
+	non_object:  TIME.STRING 
+
+	STRING  shift 39
+	.  error
+
+
+state 22
+	non_object:  DURATION.STRING 
+
+	STRING  shift 40
+	.  error
+
+
+state 23
+	primary_value:  DEC.    (23)
+
+	.  reduce 23 (src line 203)
+
+
+state 24
+	primary_value:  OCT.    (24)
+
+	.  reduce 24 (src line 213)
+
+
+state 25
+	primary_value:  HEX.    (25)
+
+	.  reduce 25 (src line 223)
+
+
+state 26
+	primary_value:  FLOAT.    (26)
+
+	.  reduce 26 (src line 233)
+
+
+state 27
+	primary_value:  STRING.    (27)
+
+	.  reduce 27 (src line 242)
+
+
+state 28
+	primary_value:  BOOL.    (28)
+
+	.  reduce 28 (src line 251)
+
+
+state 29
+	primary_value:  RUNE.    (29)
+
+	.  reduce 29 (src line 261)
+
+
+state 30
+	array_literal:  SQUARE_OPEN.array_inside SQUARE_CLOSE 
+
+	DEC  shift 23
+	OCT  shift 24
+	HEX  shift 25
+	FLOAT  shift 26
+	STRING  shift 27
+	RUNE  shift 29
+	BOOL  shift 28
+	SQUARE_OPEN  shift 30
+	TIME  shift 21
+	DURATION  shift 22
+	.  error
+
+	non_object  goto 42
+	array_inside  goto 41
+	array_literal  goto 20
+	primary_value  goto 19
+
+state 31
+	field_path:  field_path_head '.' field_name.    (8)
+
+	.  reduce 8 (src line 105)
+
+
+state 32
+	field_path_head:  field_path_head '.' IDENTIFIER.    (10)
+	field_name:  IDENTIFIER.    (11)
+	field_name:  IDENTIFIER.'[' primary_value ']' 
+	field_name:  IDENTIFIER.'[' ']' 
+
+	'['  shift 14
+	':'  reduce 11 (src line 125)
+	.  reduce 10 (src line 118)
+
+
+state 33
+	field_name:  IDENTIFIER '[' primary_value.']' 
+
+	']'  shift 43
+	.  error
+
+
+state 34
+	field_name:  IDENTIFIER '[' ']'.    (13)
+
+	.  reduce 13 (src line 138)
+
+
+state 35
+	assign:  ':' class tags.object 
+
+	NEWLINE  shift 46
+	.  error
+
+	object  goto 44
+	suite  goto 45
+
+state 36
+	tags:  '`'.tag_list '`' 
+
+	IDENTIFIER  shift 48
+	.  error
+
+	tag_list  goto 47
+
+state 37
+	assign:  ':' '@' IDENTIFIER.    (16)
+
+	.  reduce 16 (src line 159)
+
+
+state 38
+	class:  '@' STRING.    (18)
+
+	.  reduce 18 (src line 173)
+
+
+state 39
+	non_object:  TIME STRING.    (32)
+
+	.  reduce 32 (src line 282)
+
+
+state 40
+	non_object:  DURATION STRING.    (33)
+
+	.  reduce 33 (src line 291)
+
+
+state 41
+	array_literal:  SQUARE_OPEN array_inside.SQUARE_CLOSE 
+	array_inside:  array_inside.',' non_object 
+
+	SQUARE_CLOSE  shift 49
+	','  shift 50
+	.  error
+
+
+state 42
+	array_inside:  non_object.    (35)
+
+	.  reduce 35 (src line 309)
+
+
+state 43
+	field_name:  IDENTIFIER '[' primary_value ']'.    (12)
+
+	.  reduce 12 (src line 131)
+
+
+state 44
+	assign:  ':' class tags object.    (15)
+
+	.  reduce 15 (src line 152)
+
+
+state 45
+	object:  suite.    (37)
+
+	.  reduce 37 (src line 327)
+
+
+state 46
+	suite:  NEWLINE.INDENT list DEDENT 
+
+	INDENT  shift 51
+	.  error
+
+
+state 47
+	tags:  '`' tag_list.'`' 
+	tag_list:  tag_list.',' IDENTIFIER '=' STRING 
+
+	'`'  shift 52
+	','  shift 53
+	.  error
+
+
+state 48
+	tag_list:  IDENTIFIER.'=' STRING 
+
+	'='  shift 54
+	.  error
+
+
+state 49
+	array_literal:  SQUARE_OPEN array_inside SQUARE_CLOSE.    (34)
+
+	.  reduce 34 (src line 302)
+
+
+state 50
+	array_inside:  array_inside ','.non_object 
+
+	DEC  shift 23
+	OCT  shift 24
+	HEX  shift 25
+	FLOAT  shift 26
+	STRING  shift 27
+	RUNE  shift 29
+	BOOL  shift 28
+	SQUARE_OPEN  shift 30
+	TIME  shift 21
+	DURATION  shift 22
+	.  error
+
+	non_object  goto 55
+	array_literal  goto 20
+	primary_value  goto 19
+
+state 51
+	suite:  NEWLINE INDENT.list DEDENT 
+
+	IDENTIFIER  shift 8
+	IMPORT  shift 5
+	.  error
+
+	list  goto 56
+	field_path_head  goto 7
+	field_name  goto 6
+	field_path  goto 4
+	field  goto 3
+
+state 52
+	tags:  '`' tag_list '`'.    (20)
+
+	.  reduce 20 (src line 183)
+
+
+state 53
+	tag_list:  tag_list ','.IDENTIFIER '=' STRING 
+
+	IDENTIFIER  shift 57
+	.  error
+
+
+state 54
+	tag_list:  IDENTIFIER '='.STRING 
+
+	STRING  shift 58
+	.  error
+
+
+state 55
+	array_inside:  array_inside ',' non_object.    (36)
+
+	.  reduce 36 (src line 319)
+
+
+state 56
+	list:  list.NEWLINE field 
+	list:  list.NEWLINE 
+	suite:  NEWLINE INDENT list.DEDENT 
+
+	NEWLINE  shift 9
+	DEDENT  shift 59
+	.  error
+
+
+state 57
+	tag_list:  tag_list ',' IDENTIFIER.'=' STRING 
+
+	'='  shift 60
+	.  error
+
+
+state 58
+	tag_list:  IDENTIFIER '=' STRING.    (22)
+
+	.  reduce 22 (src line 195)
+
+
+state 59
+	suite:  NEWLINE INDENT list DEDENT.    (38)
+
+	.  reduce 38 (src line 334)
+
+
+state 60
+	tag_list:  tag_list ',' IDENTIFIER '='.STRING 
+
+	STRING  shift 61
+	.  error
+
+
+state 61
+	tag_list:  tag_list ',' IDENTIFIER '=' STRING.    (21)
+
+	.  reduce 21 (src line 189)
+
+
+27 terminals, 17 nonterminals
+39 grammar rules, 62/2000 states
+0 shift/reduce, 0 reduce/reduce conflicts reported
+66 working sets used
+memory: parser 41/30000
+35 extra closures
+72 shift entries, 3 exceptions
+22 goto entries
+11 entries saved by goto default
+Optimizer space used: output 79/30000
+79 table entries, 0 zero
+maximum spread: 27, maximum offset: 51

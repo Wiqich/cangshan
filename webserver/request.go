@@ -72,6 +72,14 @@ func newRequest(request *http.Request, response http.ResponseWriter, formatter *
 	return req
 }
 
+func (request *Request) GetHttpResponseWriter() http.ResponseWriter {
+	return request.response
+}
+
+func (request *Request) GetHttpRequest() *http.Request {
+	return request.Request
+}
+
 // ResponseHeader returns response header map that will be sent
 func (request *Request) ResponseHeader() http.Header {
 	return request.response.Header()
@@ -112,6 +120,10 @@ func (request *Request) WriteAndStop(status int, content []byte, contentType str
 
 func (request *Request) Stop() {
 	request.stopped = true
+}
+
+func (request *Request) Done() {
+	request.done = true
 }
 
 func (request *Request) buildResponse() error {

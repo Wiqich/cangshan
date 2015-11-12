@@ -1,0 +1,8 @@
+IntVal: 1
+FloatVal: 2.3
+BoolVal: true
+StringVal: "string"
+StructVal:
+.A: @IntVal
+.B: false
+ArrVal: [1, 2, 3, 4, 5]

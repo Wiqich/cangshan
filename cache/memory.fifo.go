@@ -64,7 +64,7 @@ func (cache *FIFOMemoryCache) Initialize() error {
 }
 
 func (cache *FIFOMemoryCache) Set(key string, value interface{}) error {
-	logging.Debug("FIFOMemoryCache.Set: %s -> %v", key, value)
+	logging.Debug("FIFOMemoryCache.Set: %s -> %v, (%d:%d)", key, value, cache.keys.Len(), len(cache.data))
 	cache.Lock()
 	defer cache.Unlock()
 	if _, found := cache.data[key]; !found {
@@ -80,7 +80,7 @@ func (cache *FIFOMemoryCache) Set(key string, value interface{}) error {
 }
 
 func (cache *FIFOMemoryCache) Get(key string) (interface{}, bool, error) {
-	logging.Debug("FIFOMemoryCache.Get: %s", key)
+	logging.Debug("FIFOMemoryCache.Get: %s, (%d:%d)", key, cache.keys.Len(), len(cache.data))
 	cache.Lock()
 	defer cache.Unlock()
 	if item, found := cache.data[key]; found {

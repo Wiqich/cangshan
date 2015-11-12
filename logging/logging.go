@@ -21,6 +21,7 @@ var (
 	globalLogging *Logging
 	caches        = make(map[string]*list.List)
 	flushMutex    sync.Mutex
+	EnableDebug   bool
 )
 
 // Logging assemble handlers for logging functions
@@ -39,6 +40,9 @@ func (log *Logging) Initialize() error {
 				hs = make([]*Handler, 0, 1)
 			}
 			log.handlers[level] = append(hs, handler)
+			if level == "debug" {
+				EnableDebug = true
+			}
 		}
 	}
 	globalLogging = log

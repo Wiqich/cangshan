@@ -1,15 +1,11 @@
 package ipipnet
 
 import (
-	"crypto/sha1"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
-	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -42,36 +38,32 @@ type indexedSections struct {
 }
 
 type IPIPNet struct {
+	*ipipNetDataSet
 	VersionURL      string
 	DownloadURL     string
 	Path            string
 	UpdateInterval  time.Duration
 	ForceInitialize bool
+	DataSetCapacity int
 	idDict          *iplocater.IDDict
-	version         string
 	sections        *indexedSections
 }
 
 func (client *IPIPNet) Initialize() error {
-	iplocater.Debug("initialize ipip.net client")
-	if _, err := os.Stat(client.Path); err != nil {
-		if err := os.MkdirAll(client.Path, 0755); err != nil {
-			return fmt.Errorf("ensure data directory fail: %s", err.Error())
-		}
-	}
 	var err error
+	iplocater.Debug("initialize ipip.net client")
+	client.sections = &indexedSections{
+		sections: make([]locationSection, 0),
+		index:    make([]section, 256),
+	}
+	if client.ipipNetDataSet, err = loadDataSet(client.Path, client.DataSetCapacity, client.VersionURL, client.DownloadURL); err != nil {
+		return fmt.Errorf("load ipip.net local data set %s fail: %s", client.Path, err.Error())
+	}
 	if client.idDict, err = iplocater.LoadIDDict(filepath.Join(client.Path, "iddict.csv")); err != nil {
 		return fmt.Errorf("load iplocater id dictionary fail: %s", err.Error())
-	} else {
-		iplocater.Debug("load iplocater id dictionary success")
-		text, _ := json.MarshalIndent(client.idDict, "", "    ")
-		ioutil.WriteFile(filepath.Join(client.Path, "iddict.dump.json"), text, 0755)
-	}
-	if err := client.selectLastVersion(); err != nil {
-		return err
 	}
 	if err := client.load(); err != nil {
-		return err
+		return fmt.Errorf("load ipip.net data fail: %s", err.Error())
 	}
 	if client.UpdateInterval > 0 {
 		go func() {
@@ -108,63 +100,31 @@ func (client *IPIPNet) Locate(ip net.IP) (*iplocater.Location, error) {
 	return nil, nil
 }
 
-func (client *IPIPNet) download() (content []byte, version string, err error) {
-	var response *http.Response
-	var etag string
-	var timestamp time.Time
-	if response, err = http.Get(client.DownloadURL); err != nil {
-	} else if etag = response.Header.Get("ETag"); etag == "" {
-		err = errors.New("missing ETag header")
-	} else if !strings.HasPrefix(etag, "sha1-") {
-		err = fmt.Errorf("unsupported ETag header: %s", etag)
-	} else if ts := response.Header.Get("Last-Modified"); ts == "" {
-		err = errors.New("missing Last-Modified header")
-	} else if timestamp, err = time.Parse(time.RFC1123, ts); err != nil {
-		err = fmt.Errorf("invalid Last-Modified: %s", ts)
-	} else if content, err = ioutil.ReadAll(response.Body); err != nil {
-		err = fmt.Errorf("read http response body fail: %s", err.Error())
-	} else if sum := fmt.Sprintf("%x", sha1.Sum(content)); sum != etag[5:] {
-		err = fmt.Errorf("check sum fail: actual=%s, expected=%s", sum, etag[5:])
-	} else {
-		version = fmt.Sprintf("%s_%s", timestamp.Format("20060102150405"), etag[5:])
-		iplocater.Debug("download ipip.net data success")
-	}
-	return
-}
-
 func (client *IPIPNet) update() error {
-	iplocater.Debug("update ipip.net data")
-	if updateVersion, err := client.checkUpdate(); err != nil {
-		// iplocater.Error("check ipip.net update fail: %s", err)
-		return fmt.Errorf("check update fail: %s", err.Error())
-	} else if updateVersion != nil {
-		if filename, err := client.download(); err == nil {
-			updateVersion.Filename = filename
-			client.version = updateVersion
-			client.version.save(filepath.Join(client.Path, ".version"))
-			iplocater.Debug("download ipip.net data success")
-			if err := client.load(); err != nil {
-				// iplocater.Error("load ipip.net data fail: %s", err)
-				return fmt.Errorf("load ipip.net data fail: %s", err)
-			}
-			iplocater.Debug("load new ipip.net data success")
-		} else {
-			// iplocater.Error("download ipip.net data fail: %s", err)
-			return fmt.Errorf("download ipip.net data fail: %s", err)
-		}
+	if version, err := client.ipipNetDataSet.update(); err != nil {
+		return fmt.Errorf("update ipip.net data set fail: %s", err.Error())
+	} else if version == nil {
+		iplocater.Debug("ipip.net data is up-to-date: %s", client.getVersion().String())
+		return nil
+	} else if err := client.load(); err != nil {
+		return fmt.Errorf("load ipip.net data fail: %s", err.Error())
 	} else {
-		iplocater.Debug("ipip.net data is up-to-date")
+		iplocater.Debug("update ipip.net data success: %s", client.getVersion().String())
 	}
 	return nil
 }
 
 func (client *IPIPNet) load() error {
-	if client.version == "" {
-		iplocater.Debug("no available version")
-		return nil
+	version := client.getVersion()
+	if version == nil {
+		if client.ForceInitialize {
+			return client.update()
+		} else {
+			return errors.New("no data available")
+		}
 	}
 	iplocater.Debug("load ipip.net data")
-	if data, err := ioutil.ReadFile(filepath.Join(client.Path, client.version.Filename)); err != nil {
+	if data, err := ioutil.ReadFile(version.getDataPath()); err != nil {
 		return fmt.Errorf("read data fail: %s", err.Error())
 	} else {
 		textOffset := binary.BigEndian.Uint32(data[:4]) - 1024
@@ -192,7 +152,7 @@ func (client *IPIPNet) load() error {
 		}
 		client.sections = idxSections
 	}
-	iplocater.Debug("load ipip.net data success")
+	iplocater.Debug("load ipip.net data success: %s", version.String())
 	return nil
 }
 
